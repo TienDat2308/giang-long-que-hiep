@@ -1,0 +1,9 @@
+node_modules/
+www/
+dist/
+# the iOS project is generated on the macOS build runner (see .github/workflows/mobile.yml)
+ios/
+*.apk
+*.ipa
+.DS_Store
+*.log

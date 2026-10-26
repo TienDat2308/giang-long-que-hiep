@@ -1,0 +1,88 @@
+name: Mobile builds
+
+# Android: debug-signed APK, installable by sideloading.
+# iOS: unsigned IPA built on a macOS runner; sign it on install with AltStore or Sideloadly.
+# Both land in the "mobile-latest" GitHub release, replaced on every push to main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - run: node scripts/patch-native.mjs
+      - name: Build debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk GiangLongQueHiep.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: GiangLongQueHiep.apk
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap add ios
+      - run: npx cap sync ios
+      - run: node scripts/patch-native.mjs
+      - name: Build unsigned IPA
+        working-directory: ios/App
+        run: |
+          if [ -d App.xcworkspace ]; then TARGET="-workspace App.xcworkspace"; else TARGET="-project App.xcodeproj"; fi
+          xcodebuild $TARGET -scheme App -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir -p Payload && cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry "$GITHUB_WORKSPACE/GiangLongQueHiep-unsigned.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: GiangLongQueHiep-unsigned.ipa
+
+  release:
+    needs: [android, ios]
+    if: ${{ !cancelled() && (needs.android.result == 'success' || needs.ios.result == 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Publish the "mobile-latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          files=$(ls *.apk *.ipa 2>/dev/null || true)
+          gh release delete mobile-latest --repo "$REPO" --yes --cleanup-tag || true
+          gh release create mobile-latest $files --repo "$REPO" --target "$GITHUB_SHA" --prerelease \
+            --title "Bản mobile mới nhất" \
+            --notes "Android: tải GiangLongQueHiep.apk về máy rồi mở để cài (cho phép cài từ nguồn không xác định). iOS: cài GiangLongQueHiep-unsigned.ipa bằng AltStore hoặc Sideloadly với Apple ID của bạn, hoặc mở bản web bằng Safari rồi chọn Thêm vào Màn hình chính."

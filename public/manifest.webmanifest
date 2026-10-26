@@ -1,0 +1,18 @@
+{
+  "name": "Giáng Long Que Hiệp",
+  "short_name": "Que Hiệp",
+  "description": "Game người que kiếm hiệp: khinh công, quyền cước và Giáng Long Thập Bát Chưởng.",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0c0a12",
+  "theme_color": "#0c0a12",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

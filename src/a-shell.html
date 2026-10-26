@@ -1,0 +1,238 @@
+<title>Giáng Long Que Hiệp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Ma+Shan+Zheng&display=swap">
+<style>
+/* Layout: one full-bleed moonlit stage; HUD pinned to the corners, title scroll set left so the hero stays visible on the right */
+:root{
+  --ink:#0c0a12; --night:#1b1530; --moon:#f4e7c5; --gold:#f2b544; --jade:#62d6b4; --blood:#e2483f;
+  --paper:#efe6d2; --mist:rgba(239,230,210,.62); --line:rgba(239,230,210,.18);
+  --f-han:"Ma Shan Zheng","KaiTi","STKaiti",serif;
+  --f-display:"Cormorant Garamond","Iowan Old Style",Georgia,serif;
+  --f-body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--f-body);font-size:14px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#rotate{display:none;position:fixed;inset:0;z-index:20;place-items:center;text-align:center;padding-inline:24px;background:rgba(9,7,14,.92);font-family:var(--f-display);font-size:24px;font-weight:600}
+@media (orientation:portrait){body.touch.playing #rotate{display:grid}}
+#stage{position:fixed;inset:0}
+#game{display:block;width:100%;height:100%}
+
+/* HUD */
+#hud,#skills,#touch{display:none}
+body.playing #hud,body.playing #skills{display:block}
+body.playing.touch #touch{display:flex}
+body.touch #skills{display:none!important}
+.top{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;justify-content:space-between;align-items:flex-start;gap:16px;pointer-events:none}
+.vitals{display:grid;gap:5px;width:min(320px,44vw)}
+.who{display:flex;align-items:baseline;gap:10px}
+.who .nm{font-family:var(--f-display);font-weight:700;font-size:21px;line-height:1}
+.lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mist);font-variant-numeric:tabular-nums}
+.bar{position:relative;height:10px;background:rgba(239,230,210,.08);border:1px solid var(--line);overflow:hidden;clip-path:polygon(0 0,100% 0,calc(100% - 7px) 100%,0 100%)}
+.bar>i{position:absolute;inset:0;transform-origin:left center;background:linear-gradient(90deg,#9e2630,var(--blood));transition:transform .12s linear}
+.bar.chi{height:7px}
+.bar.chi>i{background:linear-gradient(90deg,#a8691a,var(--gold))}
+.bar.chi.full{border-color:rgba(242,181,68,.8);box-shadow:0 0 12px rgba(242,181,68,.5)}
+.tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(12,10,18,.75)}
+.meta{display:flex;align-items:center;gap:14px;text-align:right}
+.meta .wave{font-family:var(--f-display);font-style:italic;font-weight:600;font-size:20px;color:var(--mist)}
+.meta .score{font-family:var(--f-display);font-weight:700;font-size:28px;line-height:1;font-variant-numeric:tabular-nums;min-width:4ch}
+.pause{pointer-events:auto;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:rgba(12,10,18,.5);color:var(--paper);font-size:11px;cursor:pointer}
+.pause:focus-visible,.cta:focus-visible,.tb:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+#bossBar{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 78px);width:min(520px,calc(100% - 32px));display:grid;gap:4px;pointer-events:none}
+.bossName{font-family:var(--f-display);font-weight:700;font-size:18px;letter-spacing:.08em;color:#ff9a90;text-align:center}
+.bar.boss{height:8px}
+.bar.boss>i{background:linear-gradient(90deg,#5e1028,var(--blood))}
+#combo{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:32%;display:grid;justify-items:end;pointer-events:none}
+#combo b{font-family:var(--f-display);font-style:italic;font-weight:700;font-size:64px;line-height:.9;color:var(--gold);text-shadow:0 0 18px rgba(242,181,68,.45);font-variant-numeric:tabular-nums}
+#combo span{font-family:var(--f-display);font-style:italic;font-size:18px;letter-spacing:.04em}
+#combo.bump b{animation:bump .18s ease-out}
+@keyframes bump{from{transform:scale(1.25)}to{transform:scale(1)}}
+
+/* Skill strip (keyboard) */
+#skills{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);pointer-events:none;width:max-content;max-width:calc(100% - 32px)}
+.strip{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+.chip{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 6px;background:rgba(12,10,18,.6);border:1px solid var(--line);opacity:.42;transition:opacity .2s,border-color .2s}
+.chip.ready{opacity:1;border-color:rgba(242,181,68,.55)}
+.chip.ult.ready{animation:breath 1.1s ease-in-out infinite alternate}
+@keyframes breath{to{box-shadow:0 0 18px rgba(242,181,68,.55)}}
+kbd{font:600 11px var(--f-body);border:1px solid rgba(239,230,210,.35);border-bottom-width:2px;padding:1px 6px;border-radius:3px;color:var(--paper);background:rgba(239,230,210,.05)}
+.chip .han{font-family:var(--f-han);font-weight:400;font-size:24px;line-height:1;color:var(--gold)}
+.chip span{font-family:var(--f-display);font-weight:600;font-size:16px;white-space:nowrap}
+.chip em{font-style:normal;font-size:11px;color:var(--mist);font-variant-numeric:tabular-nums}
+@media (max-width:1560px){.chip span{display:none}.chip{padding-right:10px}}
+
+/* Touch controls */
+#touch{position:fixed;left:0;right:0;bottom:0;justify-content:space-between;align-items:flex-end;gap:12px;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 12px);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none}
+.pad,.acts .row{display:flex;gap:10px;justify-content:flex-end;align-items:flex-end}
+.acts{display:grid;gap:10px;justify-items:end}
+.sks{display:grid;grid-template-columns:repeat(3,46px);gap:8px}
+@media (max-width:420px){.pad .tb{width:56px;height:56px}.tb.big{width:60px;height:60px}.tb{width:52px;height:52px}}
+.tb{pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent;width:58px;height:58px;border-radius:50%;border:1px solid rgba(239,230,210,.3);background:rgba(20,16,32,.5);color:var(--paper);font:600 13px var(--f-body);display:grid;place-items:center;padding:0}
+.pad .tb{width:66px;height:66px;font-size:20px}
+.tb.big{width:68px;height:68px}
+.tb.sk{width:46px;height:46px;border-radius:6px;font:400 24px var(--f-han);color:var(--mist);opacity:.5}
+.tb.sk.ready{opacity:1;color:var(--gold);border-color:rgba(242,181,68,.7)}
+.tb.on{background:rgba(242,181,68,.32);border-color:var(--gold)}
+
+/* Move-name banner */
+#banner{position:fixed;left:0;right:0;top:20%;text-align:center;pointer-events:none;opacity:0;padding-inline:16px}
+#banner .han{font-family:var(--f-han);font-size:clamp(56px,11vw,128px);line-height:1;color:var(--gold);text-shadow:0 0 22px rgba(242,181,68,.55),0 0 2px #fff4d0}
+#banner .viet{font-family:var(--f-display);font-style:italic;font-weight:600;font-size:clamp(18px,2.6vw,28px);margin-top:6px;text-wrap:balance}
+#banner.foe .han{color:#ff6d62;text-shadow:0 0 22px rgba(226,72,63,.6)}
+#banner.ult{top:12%}
+#banner.show{animation:bannerIn 1.7s cubic-bezier(.2,.8,.2,1) forwards}
+#banner.ult.show{animation-duration:2.8s}
+@keyframes bannerIn{0%{opacity:0;transform:scale(1.35);filter:blur(8px)}12%{opacity:1;transform:scale(1);filter:blur(0)}72%{opacity:1}100%{opacity:0;transform:scale(.98)}}
+@keyframes bannerFade{0%,100%{opacity:0}15%,70%{opacity:1}}
+
+/* Screens */
+#overlay{position:fixed;inset:0;display:flex;flex-direction:column;overflow-y:auto;padding-block:calc(env(safe-area-inset-top,0px) + 24px) calc(env(safe-area-inset-bottom,0px) + 24px);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:linear-gradient(90deg,rgba(9,7,14,.92) 0%,rgba(9,7,14,.74) 45%,rgba(9,7,14,.12) 78%,rgba(9,7,14,0))}
+.panel{margin:auto auto auto clamp(0px,6vw,96px);width:100%;max-width:600px;display:grid;gap:18px;justify-items:start}
+.ttl{display:flex;align-items:center;gap:18px}
+.seal{font-family:var(--f-han);font-size:30px;line-height:1.05;color:#fbeee0;background:#b8322c;padding:10px 7px;writing-mode:vertical-rl;border-radius:3px;box-shadow:inset 0 0 0 2px rgba(251,238,224,.35),inset 0 0 0 5px #b8322c,inset 0 0 0 6px rgba(251,238,224,.25);transform:rotate(-3deg)}
+.eyebrow{margin:0 0 4px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
+h1,h2{margin:0;font-family:var(--f-display);font-weight:700;line-height:.98;text-wrap:balance}
+h1{font-size:clamp(40px,6.6vw,70px)}
+h2{font-size:clamp(34px,5vw,52px)}
+.lede{margin:0;max-width:52ch;font-size:15px;line-height:1.6;color:var(--mist)}
+.keys{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:7px 16px;font-size:13.5px;line-height:1.45;max-width:60ch}
+.keys dt{display:flex;gap:4px;align-items:center;white-space:nowrap}
+.keys dd{margin:0;color:var(--mist)}
+.keys dd b{color:var(--paper);font-weight:600}
+.touchhelp{display:none;margin:0;max-width:52ch;line-height:1.55;color:var(--mist)}
+body.touch .keys{display:none}
+body.touch .touchhelp{display:block}
+.row{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.cta{font:600 20px var(--f-display);letter-spacing:.03em;background:var(--gold);color:#1a1206;border:0;padding:12px 30px;cursor:pointer;clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);transition:filter .15s}
+.cta:hover{filter:brightness(1.1)}
+.diffbox{display:grid;gap:8px}
+.diff{display:inline-flex;border:1px solid var(--line);width:max-content}
+.seg{font:600 15px var(--f-body);padding:8px 22px;background:transparent;color:var(--mist);border:0;cursor:pointer}
+.seg+.seg{border-left:1px solid var(--line)}
+.seg[aria-checked="true"]{background:rgba(242,181,68,.16);color:var(--gold);box-shadow:inset 0 -2px 0 var(--gold)}
+.diffNote{margin:0;font-size:13px;line-height:1.5;color:var(--mist);max-width:52ch;min-height:3em}
+.ghost{font:600 15px var(--f-body);background:transparent;color:var(--paper);border:1px solid var(--line);padding:11px 18px;cursor:pointer}
+.ghost:hover{border-color:var(--gold)}
+.seg:focus-visible,.ghost:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.best{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mist)}
+.best b{font:700 20px var(--f-display);letter-spacing:0;color:var(--paper);margin-left:6px;font-variant-numeric:tabular-nums}
+.stat{margin:0;font-size:16px;color:var(--mist)}
+.stat b{color:var(--paper);font-family:var(--f-display);font-size:22px;font-variant-numeric:tabular-nums}
+@media (max-width:640px){
+  #overlay{background:rgba(9,7,14,.8)}
+  .panel{margin:auto}
+  .meta .wave{display:none}
+  #combo b{font-size:48px}
+}
+@media (prefers-reduced-motion:reduce){#banner.show{animation-name:bannerFade}#combo.bump b{animation:none}}
+</style>
+
+<div id="stage"><canvas id="game"></canvas></div>
+
+<div id="hud">
+  <div class="top">
+    <div class="vitals">
+      <div class="who"><span class="nm">Que Hiệp</span><span class="lbl">Sinh lực</span></div>
+      <div class="bar hp"><i id="hpFill"></i></div>
+      <div class="bar chi" id="chiBar"><i id="chiFill"></i><span class="tick" style="left:25%"></span><span class="tick" style="left:50%"></span><span class="tick" style="left:75%"></span></div>
+      <div class="lbl">Nội lực <span id="chiNum">60</span></div>
+    </div>
+    <div class="meta">
+      <div class="wave" id="wave">Đợt 1</div>
+      <div class="score" id="score">0</div>
+      <button class="pause" id="pauseBtn" aria-label="Tạm dừng">❚❚</button>
+    </div>
+  </div>
+  <div id="bossBar" hidden><div class="bossName" id="bossName">Huyết Ma Lão Tổ</div><div class="bar boss"><i id="bossFill"></i></div></div>
+  <div id="combo" hidden><b id="comboN">0</b><span>liên kích</span></div>
+</div>
+
+<div id="skills">
+  <div class="strip">
+    <div class="chip" data-cost="30"><kbd>U</kbd><b class="han">亢</b><span>Kháng Long Hữu Hối</span><em>30</em></div>
+    <div class="chip" data-cost="40"><kbd>I</kbd><b class="han">飛</b><span>Phi Long Tại Thiên</span><em>40</em></div>
+    <div class="chip" data-cost="25"><kbd>O</kbd><b class="han">擺</b><span>Thần Long Bãi Vĩ</span><em>25</em></div>
+    <div class="chip" data-cost="30"><kbd>Y</kbd><b class="han">見</b><span>Kiến Long Tại Điền</span><em>30</em></div>
+    <div class="chip" data-cost="35"><kbd>H</kbd><b class="han">鴻</b><span>Hồng Tiệm Ư Lục</span><em>35</em></div>
+    <div class="chip ult" data-cost="100"><kbd>L</kbd><b class="han">降</b><span>Giáng Long Thập Bát Chưởng</span><em>100</em></div>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="pad">
+    <button class="tb" data-act="left" aria-label="Sang trái">◀</button>
+    <button class="tb" data-act="down" aria-label="Xuống">▼</button>
+    <button class="tb" data-act="right" aria-label="Sang phải">▶</button>
+  </div>
+  <div class="acts">
+    <div class="sks">
+      <button class="tb sk" data-act="s1" data-cost="30" aria-label="Kháng Long Hữu Hối">亢</button>
+      <button class="tb sk" data-act="s2" data-cost="40" aria-label="Phi Long Tại Thiên">飛</button>
+      <button class="tb sk" data-act="s3" data-cost="25" aria-label="Thần Long Bãi Vĩ">擺</button>
+      <button class="tb sk" data-act="s4" data-cost="30" aria-label="Kiến Long Tại Điền">見</button>
+      <button class="tb sk" data-act="s5" data-cost="35" aria-label="Hồng Tiệm Ư Lục">鴻</button>
+      <button class="tb sk" data-act="ult" data-cost="100" aria-label="Giáng Long Thập Bát Chưởng">降</button>
+    </div>
+    <div class="row">
+      <button class="tb" data-act="dash">Lướt</button>
+      <button class="tb big" data-act="attack">Đánh</button>
+      <button class="tb big" data-act="jump">Nhảy</button>
+    </div>
+  </div>
+</div>
+
+<div id="banner"><div class="han"></div><div class="viet"></div></div>
+<div id="rotate"><p>Xoay ngang máy để thi triển khinh công</p></div>
+
+<div id="overlay">
+  <section class="panel" data-screen="menu">
+    <header class="ttl">
+      <div class="seal" aria-hidden="true">降龍</div>
+      <div>
+        <p class="eyebrow">Võ hiệp người que</p>
+        <h1>Giáng Long Que Hiệp</h1>
+      </div>
+    </header>
+    <p class="lede">Một thân khinh công, mười tám chưởng hàng long. Trụ vững trên mái ngói dưới trăng trước đao khách, cung thủ, ám khí thủ và thiết chùy của Huyết Ma giáo. Cứ mỗi đợt thứ năm, Huyết Ma Lão Tổ hoặc Lạc Nhật Thần Cung sẽ xuất hiện.</p>
+    <dl class="keys">
+      <dt><kbd>A</kbd><kbd>D</kbd></dt><dd>Di chuyển</dd>
+      <dt><kbd>W</kbd><kbd>Space</kbd></dt><dd>Nhảy ba tầng: lần hai lộn nhào, lần ba lộn hai vòng. Giữ phím khi đang rơi để lướt gió.</dd>
+      <dt><kbd>S</kbd>+<kbd>W</kbd></dt><dd>Nhảy xuống khỏi mái ngói</dd>
+      <dt><kbd>K</kbd><kbd>Shift</kbd></dt><dd><b>Lăng Ba Vi Bộ</b>: lướt né, xuyên qua đòn và ám khí</dd>
+      <dt><kbd>J</kbd></dt><dd>Đứng yên: quyền chưởng bốn thế, thế cuối lộn ngược hất địch lên trời. Trên không: lộn nhào cước, bấm tiếp để phi cước bổ xuống.</dd>
+      <dt><kbd>A</kbd>/<kbd>D</kbd>+<kbd>J</kbd></dt><dd>Cước pháp: cước thẳng, <b>Hồi Toàn Cước</b>, <b>Xuyên Phong Cước</b>, <b>Phủ Sơn Cước</b> bổ nứt đất. Đang chạy nhanh thì mở đầu bằng <b>Phi Tất</b> (gối bay).</dd>
+      <dt><kbd>S</kbd>+<kbd>J</kbd></dt><dd><b>Tảo Đường Cước</b> quét ngã địch, bấm tiếp để lộn ngược hất lên.</dd>
+      <dt><kbd>U</kbd></dt><dd><b>Kháng Long Hữu Hối</b> · 30 nội lực: một chưởng rồng xuyên thẳng</dd>
+      <dt><kbd>I</kbd></dt><dd><b>Phi Long Tại Thiên</b> · 40: vọt lên trời rồi giáng chưởng xuống đất</dd>
+      <dt><kbd>O</kbd></dt><dd><b>Thần Long Bãi Vĩ</b> · 25: xoay người quét vĩ hai bên</dd>
+      <dt><kbd>Y</kbd></dt><dd><b>Kiến Long Tại Điền</b> · 30: chưởng xuống đất, rồng vàng độn thổ trồi lên hất tung địch</dd>
+      <dt><kbd>H</kbd></dt><dd><b>Hồng Tiệm Ư Lục</b> · 35: dang cánh hồng nhạn sà xuống, cuốn địch theo rồi tung chưởng</dd>
+      <dt><kbd>L</kbd></dt><dd><b>Giáng Long Thập Bát Chưởng</b> · đầy nội lực: mười tám rồng vàng truy kích</dd>
+    </dl>
+    <p class="touchhelp">Hai nút ◀ ▶ để di chuyển. Nhảy ba tầng có lộn nhào, giữ Nhảy khi rơi để lướt gió. Bấm Đánh liên tục khi đứng yên ra quyền chưởng, giữ ◀ ▶ khi bấm ra cước pháp, giữ ▼ ra Tảo Đường Cước, đang chạy nhanh thì mở đầu bằng gối bay. Năm ấn chữ Hán là năm chiêu Giáng Long, ấn 降 là đủ mười tám chưởng. Ấn sáng lên khi đủ nội lực. Xoay ngang máy để thấy rộng hơn.</p>
+    <div class="diffbox">
+      <div class="diff" role="radiogroup" aria-label="Độ khó">
+        <button class="seg" role="radio" data-diff="easy">Dễ</button>
+        <button class="seg" role="radio" data-diff="normal">Vừa</button>
+        <button class="seg" role="radio" data-diff="hard">Khó</button>
+      </div>
+      <p class="diffNote" id="diffNote"></p>
+    </div>
+    <div class="row"><button id="startBtn" class="cta">Vào trận</button><span class="best">Kỷ lục mức này<b id="best">0</b></span></div>
+  </section>
+  <section class="panel" data-screen="pause" hidden>
+    <h2>Tạm nghỉ</h2>
+    <p class="stat">Nhấn <kbd>P</kbd> hoặc nút dưới để đánh tiếp.</p>
+    <div class="row"><button id="resumeBtn" class="cta">Tiếp tục</button><button id="quitBtn" class="ghost">Về màn chính</button></div>
+  </section>
+  <section class="panel" data-screen="over" hidden>
+    <header class="ttl"><div class="seal" aria-hidden="true">敗</div><h2>Que Hiệp gục ngã</h2></header>
+    <p class="stat">Mức <b id="ovDiff">Vừa</b> · trụ đến đợt <b id="ovWave">1</b> · <b id="ovScore">0</b> điểm · kỷ lục <b id="ovBest">0</b></p>
+    <div class="row"><button id="againBtn" class="cta">Đấu lại</button><button id="menuBtn" class="ghost">Đổi độ khó</button></div>
+  </section>
+</div>
+
+<script>

@@ -1,0 +1,13 @@
+{
+  "appId": "com.tiendat2308.gianglongquehiep",
+  "appName": "Giáng Long Que Hiệp",
+  "webDir": "www",
+  "backgroundColor": "#0c0a12",
+  "android": {
+    "backgroundColor": "#0c0a12"
+  },
+  "ios": {
+    "backgroundColor": "#0c0a12",
+    "contentInset": "never"
+  }
+}

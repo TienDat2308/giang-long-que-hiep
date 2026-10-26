@@ -1,0 +1,21 @@
+{
+  "name": "giang-long-que-hiep",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Game người que kiếm hiệp: khinh công, quyền cước và Giáng Long Thập Bát Chưởng.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "sync": "node scripts/build.mjs && cap sync && node scripts/patch-native.mjs",
+    "android": "npm run sync && cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}
