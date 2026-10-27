@@ -3,7 +3,15 @@
 const game = {
   state: 'menu', wave: 0, score: 0, best: 0, enemies: [], dragons: [], shots: [], debris: [], rain: [], queue: [], spawnT: 0, waveT: 0, waveClear: false,
   combo: 0, comboT: 0, slow: 1, slowT: 0, ultOn: false, ultDark: 0, ultCount: 0, overT: 0, boss: null, player: null, demoT: 1.2, demoI: 0,
+  mode: 'campaign', chapter: 0, stage: 0, chapterScore: 0, startTime: 0, fade: 0, mapCycleT: 8,
 };
+// modes: Phá đảo walks the five maps in order (three waves and a boss each); Sinh tồn is endless, changing map every five waves
+const MODES = {
+  campaign: { name: 'Phá đảo', note: 'Năm hồi, năm cảnh: Rừng Trúc, Thiền Viện, Tuyết Sơn, Lạc Nhật Cổ Thành, Huyết Ma Cung. Mỗi hồi ba đợt địch rồi một trùm. Thua thì đấu lại đúng hồi đang dở.' },
+  endless: { name: 'Sinh tồn', note: 'Đánh đến khi gục, địch mạnh dần. Cứ năm đợt đổi cảnh và gặp một trùm. Tính điểm kỷ lục.' },
+};
+const STAGES = 4; // per chapter: three waves, then the boss
+try { const m = localStorage.getItem('glqh-mode'); if (MODES[m]) game.mode = m; } catch (e) {}
 // difficulty: multipliers on foes (hp, damage, attack cooldown, wind-up, numbers) and on the hero's recovery
 const DIFFS = {
   easy: { name: 'Dễ', note: 'Địch chậm và thưa, hồi nhiều sinh lực sau mỗi đợt. Hợp để luyện chiêu.', hp: 1, boss: 1, dmg: 1, cd: 1, wind: 1, count: 1, conc: 0, heal: 0.25, chi: 4.5, chiHit: 3, poise: 99, inv: 0.8, shot: 1, score: 0.8 },
@@ -13,8 +21,10 @@ const DIFFS = {
 let DIFF = DIFFS.normal;
 game.diff = 'normal';
 try { const d = localStorage.getItem('glqh-diff'); if (DIFFS[d]) { game.diff = d; DIFF = DIFFS[d]; } } catch (e) {}
-const bestKey = () => 'glqh-best-' + game.diff;
+const bestKey = () => (game.mode === 'campaign' ? 'glqh-best-campaign-' : 'glqh-best-') + game.diff;
 function loadBest() { try { game.best = +localStorage.getItem(bestKey()) || 0; } catch (e) { game.best = 0; } }
+const clearedHere = () => { try { return localStorage.getItem('glqh-clear-' + game.diff) === '1'; } catch (e) { return false; } };
+function saveBest() { if (game.score > game.best) { game.best = game.score; try { localStorage.setItem(bestKey(), game.best); } catch (e) {} } }
 loadBest();
 const HD = '〇一二三四五六七八九';
 function han(n) {
@@ -35,6 +45,12 @@ function banner(hanTxt, viet, cls = '') {
 function hit(e, dmg, kbx, kby, stun, o = {}) {
   if (e.dead) return false;
   const pl = game.player;
+  if (e.bellT > 0 && !o.pierce) { // 金鐘罩: the golden bell turns every blow aside
+    sparks(e.x, e.y - 60 * e.s, Math.sign(kbx) || 1, 8, C.gold); hitstop(0.03);
+    const now = performance.now();
+    if (now - (game.lastClang || 0) > 160) { game.lastClang = now; sfx('clang'); popText(e.x, e.y - 160 * e.s, 'Vô hiệu', '#ffd27a', 16); }
+    return false;
+  }
   e.hp -= dmg; e.flashT = 0.1;
   let armored = !o.big && ((e.d.armor && (e.mode === 'wind' || e.mode === 'atk')) || e.armorT > 0);
   if (!armored && !o.big && !e.d.boss) { // 破勢: a foe kept in hitstun too long breaks free and counters at once
@@ -44,7 +60,7 @@ function hit(e, dmg, kbx, kby, stun, o = {}) {
       ring(e.x, e.y - 50 * e.s, 10, 80, 0.3, C.blood, 6); popText(e.x, e.y - 125 * e.s, 'Phá thế!', '#ff6d62', 20);
     }
   }
-  const kbm = e.d.boss ? 0.35 : e.type === 'heavy' ? 0.6 : 1;
+  const kbm = e.d.boss ? 0.35 : e.d.smash ? 0.6 : 1;
   if (!armored) {
     e.vx = kbx * kbm; if (kby < 0) e.vy = kby * kbm; else if (!e.ground) e.vy = Math.max(e.vy, kby);
     e.stun = stun * (e.d.boss ? 0.4 : 1); e.mode = 'hurt'; e.st = 0; e.slamming = false; e.trail.length = 0;
@@ -102,30 +118,60 @@ function hurtPlayer(dmg, dir) {
 }
 function gameOver() {
   game.state = 'over'; game.slow = 0.3; game.slowT = 1.2; game.overT = 1.7; game.ultOn = false;
-  if (game.score > game.best) { game.best = game.score; try { localStorage.setItem(bestKey(), game.best); } catch (e) {} }
+  saveBest();
   banner('敗', 'Que Hiệp gục ngã', 'foe');
+  for (const a in keys) keys[a] = false;
+}
+function winGame() {
+  game.state = 'win'; game.overT = 2.4; game.winTime = (performance.now() - game.startTime) / 1000;
+  saveBest(); try { localStorage.setItem('glqh-clear-' + game.diff, '1'); } catch (e) {}
+  banner('天下無敵', 'Phá đảo! Huyết Ma giáo tan rã'); flash(0.6, '255,236,190'); sfx('gong');
   for (const a in keys) keys[a] = false;
 }
 
 // ---------- waves ----------
+// a foe drawn from the current map's mix, e.g. bamboo forest: mostly swordsmen and dart throwers
+function pickFoe() {
+  const mix = Object.entries(MAP.mix), total = mix.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [type, w] of mix) if ((r -= w) <= 0) return type;
+  return 'thug';
+}
 function startWave(n) {
   game.wave = n; game.waveClear = false; game.spawnT = 1.2;
-  // every fifth wave brings a boss, alternating the blood sword master and the sunset archer
-  const q = [], boss = n % 5 === 0, bossType = (n / 5) % 2 === 1 ? 'boss' : 'archboss';
+  const camp = game.mode === 'campaign', boss = camp ? game.stage === STAGES - 1 : n % 5 === 0, q = [];
   if (boss) {
-    q.push(bossType); for (let i = 0; i < 1 + n / 5; i++) q.push('thug');
-    q.push(bossType === 'boss' ? 'archer' : 'dart'); if (n >= 10) q.push('archer', 'heavy');
-  } else {
-    const k = DIFF.count;
-    for (let i = 0; i < Math.round((2 + n) * k); i++) q.push('thug');
-    for (let i = 0; i < Math.floor(n / 3 * k); i++) q.push('dart');
-    for (let i = 0; i < Math.floor(n / 2 * k); i++) q.push('archer');
-    for (let i = 0; i < Math.floor((n - 1) / 3 * k); i++) q.push('heavy');
-    for (let i = q.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [q[i], q[j]] = [q[j], q[i]]; }
-  }
+    q.push(MAP.boss); for (let i = 0; i < 1 + Math.floor(n / 5); i++) q.push('thug');
+    if (n >= 8) q.push(pickFoe(), pickFoe());
+  } else for (let i = 0, total = Math.round((3 + n * 0.9) * DIFF.count); i < total; i++) q.push(pickFoe());
   game.queue = q;
-  banner('第' + han(n) + '陣', 'Đợt ' + n + (boss ? ' · ' + ETYPES[bossType].name + ' giáng thế' : ''), boss ? 'foe' : '');
-  $('wave').textContent = 'Đợt ' + n + ' · ' + DIFF.name;
+  const where = camp ? `Hồi ${game.chapter + 1}/5 · ${boss ? 'Trùm' : `Đợt ${game.stage + 1}/3`}` : `Đợt ${n} · ${MAP.name}`;
+  $('wave').textContent = where;
+  if (camp && game.stage === 0) banner('第' + han(game.chapter + 1) + '回 · ' + MAP.han, `Hồi ${game.chapter + 1}: ${MAP.name}`);
+  else if (boss) banner('決戰', `${MAP.name} · ${ETYPES[MAP.boss].name} giáng thế`, 'foe');
+  else banner('第' + han(camp ? game.stage + 1 : n) + '陣', camp ? `${MAP.name} · đợt ${game.stage + 1}` : 'Đợt ' + n);
+}
+// switch scene: clear the field, put the hero back in the middle and fade in
+function changeMap(i) {
+  setMap(i); game.fade = 1;
+  game.enemies = []; game.shots = []; game.debris = []; game.rain = []; game.dragons = []; FX.parts = []; FX.ghosts = [];
+  const pl = game.player; pl.x = WORLD_W / 2; pl.y = pl.prevY = GROUND; pl.vx = pl.vy = 0; pl.ground = true;
+  camera(10);
+}
+function enterChapter(c) {
+  game.chapter = c; game.stage = 0; game.chapterScore = game.score;
+  changeMap(c); startWave(c * STAGES + 1);
+}
+function nextWave() {
+  if (game.mode === 'campaign') {
+    if (game.stage < STAGES - 1) { game.stage++; startWave(game.wave + 1); }
+    else if (game.chapter < MAPS.length - 1) enterChapter(game.chapter + 1);
+    else winGame();
+    return;
+  }
+  const n = game.wave + 1, mi = Math.floor((n - 1) / 5) % MAPS.length;
+  if (MAPS[mi] !== MAP) changeMap(mi);
+  startWave(n);
 }
 function spawnEnemy(type) {
   const pl = game.player, alive = game.enemies.filter(e => !e.dead);
@@ -146,10 +192,14 @@ function waves(dt) {
     game.spawnT -= dt;
     if (game.spawnT <= 0 && alive < Math.min(7 + DIFF.conc, 3 + DIFF.conc + Math.floor(game.wave / 2)) && !game.ultOn) { spawnEnemy(game.queue.shift()); game.spawnT = rand(0.5, 1.3) * (DIFF.cd + 1) / 2; }
   } else if (!alive && !game.waveClear) {
-    game.waveClear = true; game.waveT = 2.8;
-    pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * DIFF.heal); pl.chi = Math.min(pl.maxChi, pl.chi + 30);
-    banner('勝', 'Dẹp yên đợt ' + game.wave + ' · hồi sinh lực'); popText(pl.x, pl.y - 112, '+ sinh lực', '#7fe0b9', 18);
-  } else if (game.waveClear) { game.waveT -= dt; if (game.waveT <= 0) startWave(game.wave + 1); }
+    const chapterDone = game.mode === 'campaign' && game.stage === STAGES - 1;
+    game.waveClear = true; game.waveT = chapterDone ? 3.4 : 2.8;
+    pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * (chapterDone ? 0.5 : DIFF.heal)); pl.chi = Math.min(pl.maxChi, pl.chi + 30);
+    if (chapterDone && game.chapter === MAPS.length - 1) game.waveT = 1.2;
+    else if (chapterDone) banner('勝', `Qua hồi ${game.chapter + 1}: ${MAP.name}`);
+    else banner('勝', 'Dẹp yên đợt · hồi sinh lực');
+    popText(pl.x, pl.y - 112, '+ sinh lực', '#7fe0b9', 18);
+  } else if (game.waveClear) { game.waveT -= dt; if (game.waveT <= 0) nextWave(); }
 }
 
 // ---------- screens ----------
@@ -157,20 +207,34 @@ const overlay = $('overlay');
 function showScreen(kind) {
   for (const el of overlay.querySelectorAll('[data-screen]')) el.hidden = el.dataset.screen !== kind;
   overlay.hidden = false;
-  if (kind === 'over') { $('ovDiff').textContent = DIFF.name; $('ovScore').textContent = fmt(game.score); $('ovWave').textContent = game.wave; $('ovBest').textContent = fmt(game.best); }
-  if (kind === 'menu') $('best').textContent = fmt(game.best);
-  const b = overlay.querySelector(`[data-screen="${kind}"] .cta`); if (b) b.focus({ preventScroll: true });
+  const camp = game.mode === 'campaign';
+  if (kind === 'over') {
+    $('ovDiff').textContent = `${MODES[game.mode].name} · ${DIFF.name}`; $('ovScore').textContent = fmt(game.score); $('ovBest').textContent = fmt(game.best);
+    $('ovWave').textContent = camp ? `hồi ${game.chapter + 1} · ${MAP.name}` : `đợt ${game.wave}`;
+    $('retryBtn').hidden = !camp;
+  }
+  if (kind === 'win') {
+    const t = Math.round(game.winTime || 0);
+    $('wnDiff').textContent = DIFF.name; $('wnTime').textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+    $('wnScore').textContent = fmt(game.score); $('wnBest').textContent = fmt(game.best);
+  }
+  if (kind === 'menu') { $('best').textContent = fmt(game.best); $('clearMark').hidden = !clearedHere(); }
+  const b = overlay.querySelector(`[data-screen="${kind}"] .cta:not([hidden])`); if (b) b.focus({ preventScroll: true });
 }
-function newGame() {
+// chapter/score let "Đấu lại hồi này" restart the campaign at the chapter that was lost, with that chapter's starting score
+function newGame(chapter = 0, score = 0) {
   audioInit(); sfx('gong');
-  game.enemies = []; game.dragons = []; game.shots = []; game.debris = []; game.rain = []; FX.parts = []; FX.rings = []; FX.texts = []; FX.ghosts = [];
-  game.score = 0; game.combo = 0; game.comboT = 0; game.slow = 1; game.slowT = 0; game.ultOn = false; game.boss = null;
+  FX.rings = []; FX.texts = [];
+  game.score = score; game.combo = 0; game.comboT = 0; game.slow = 1; game.slowT = 0; game.ultOn = false; game.boss = null;
   for (const a in keys) keys[a] = false; for (const a in buf) buf[a] = 0;
   game.player = new Player(WORLD_W / 2); game.state = 'play';
+  if (!chapter) game.startTime = performance.now();
   overlay.hidden = true; document.body.classList.add('playing'); hudCache = {};
-  camera(10); startWave(1);
+  if (game.mode === 'campaign') enterChapter(chapter);
+  else { changeMap(0); startWave(1); }
   if (document.activeElement) document.activeElement.blur();
 }
+const retryChapter = () => newGame(game.chapter, game.chapterScore);
 function togglePause() {
   if (game.state === 'play') { game.state = 'pause'; for (const a in keys) keys[a] = false; showScreen('pause'); }
   else if (game.state === 'pause') { game.state = 'play'; overlay.hidden = true; last = performance.now(); if (document.activeElement) document.activeElement.blur(); }
@@ -179,19 +243,26 @@ function setDiff(d) {
   game.diff = d; DIFF = DIFFS[d]; loadBest();
   try { localStorage.setItem('glqh-diff', d); } catch (e) {}
   for (const b of document.querySelectorAll('[data-diff]')) b.setAttribute('aria-checked', b.dataset.diff === d ? 'true' : 'false');
-  $('diffNote').textContent = DIFF.note; $('best').textContent = fmt(game.best);
+  $('diffNote').textContent = DIFF.note; $('best').textContent = fmt(game.best); $('clearMark').hidden = !clearedHere();
+}
+function setMode(m) {
+  game.mode = m; loadBest();
+  try { localStorage.setItem('glqh-mode', m); } catch (e) {}
+  for (const b of document.querySelectorAll('[data-mode]')) b.setAttribute('aria-checked', b.dataset.mode === m ? 'true' : 'false');
+  $('modeNote').textContent = MODES[m].note; $('best').textContent = fmt(game.best);
 }
 function toMenu() {
   game.state = 'menu'; document.body.classList.remove('playing');
-  game.enemies = []; game.dragons = []; game.shots = []; game.debris = []; game.rain = [];
-  game.boss = null; game.ultOn = false; game.slow = 1; game.slowT = 0;
-  game.player = new Player(WORLD_W / 2); game.player.face = -1; camera(10); showScreen('menu');
+  game.boss = null; game.ultOn = false; game.slow = 1; game.slowT = 0; game.mapCycleT = 8;
+  game.player = new Player(WORLD_W / 2); game.player.face = -1; changeMap(MAPS.indexOf(MAP)); showScreen('menu');
 }
 document.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => setDiff(b.dataset.diff)));
-$('menuBtn').addEventListener('click', toMenu);
-$('quitBtn').addEventListener('click', toMenu);
-$('startBtn').addEventListener('click', newGame);
-$('againBtn').addEventListener('click', newGame);
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+for (const id of ['menuBtn', 'quitBtn', 'winMenuBtn']) $(id).addEventListener('click', toMenu);
+$('startBtn').addEventListener('click', () => newGame());
+$('againBtn').addEventListener('click', () => newGame());
+$('winAgainBtn').addEventListener('click', () => newGame());
+$('retryBtn').addEventListener('click', retryChapter);
 $('resumeBtn').addEventListener('click', togglePause);
 $('pauseBtn').addEventListener('click', e => { e.currentTarget.blur(); togglePause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && game.state === 'play') togglePause(); });
@@ -223,21 +294,27 @@ function camera(rdt) {
   tx = view.w >= WORLD_W ? (WORLD_W - view.w) / 2 : clamp(tx, 0, WORLD_W - view.w);
   const base = GROUND + (document.body.classList.contains('touch') ? 105 : 92) - view.h;
   const ty = Math.min(base, pl.y - view.h * 0.42);
+  if (!isFinite(view.camX) || !isFinite(view.camY)) { view.camX = tx; view.camY = ty; view.look = 0; } // recover from a bad frame instead of staying broken
   view.camX += (tx - view.camX) * (1 - Math.exp(-5 * rdt)); view.camY += (ty - view.camY) * (1 - Math.exp(-3.5 * rdt));
 }
 function demo(dt) {
   const pl = game.player; pl.chi = pl.maxChi; pl.face = -1;
   game.demoT -= dt;
   if (game.demoT <= 0 && pl.state === 'idle' && pl.ground) {
-    const seq = ['s1', 'jump', 's4', 'attack', 's5', 's3', 's2'], a = seq[game.demoI++ % seq.length];
-    const rep = a === 'jump' ? 3 : a === 'attack' ? 4 : 1;
-    for (let i = 0; i < rep; i++) setTimeout(() => { buf[a] = 0.16; }, i * (a === 'jump' ? 260 : 170));
+    const seq = ['s1', 'jump', 's4', 'fly', 'attack', 's5', 'leap', 's3', 's2'], a = seq[game.demoI++ % seq.length];
+    if (a === 'fly') { buf.dash = 0.16; setTimeout(() => { buf.attack = 0.16; }, 60); } // dash into the flying side kick
+    else if (a === 'leap') { buf.jump = 0.16; setTimeout(() => { buf.attack = 0.16; }, 90); } // scissor kick on the way up
+    else { const rep = a === 'jump' ? 3 : a === 'attack' ? 4 : 1; for (let i = 0; i < rep; i++) setTimeout(() => { buf[a] = 0.16; }, i * (a === 'jump' ? 260 : 170)); }
     game.demoT = a === 's2' ? 2.4 : 2.0;
   }
 }
 function update(dt, rdt) {
   const pl = game.player;
-  if (game.state === 'menu') demo(rdt);
+  if (game.state === 'menu') {
+    demo(rdt);
+    if ((game.mapCycleT -= rdt) <= 0 && pl.state === 'idle') { game.mapCycleT = 8; changeMap(MAPS.indexOf(MAP) + 1); } // the title screen tours the five scenes
+  }
+  game.fade = Math.max(0, game.fade - rdt * 1.1);
   pl.update(dt);
   const edt = dt * (game.ultOn ? 0.1 : 1), es = game.enemies;
   for (const e of es) e.update(edt, pl);
@@ -250,7 +327,11 @@ function update(dt, rdt) {
   for (const s of game.shots) s.update(edt, pl);
   for (const r of game.rain) {
     r.t -= edt;
-    if (!r.fired && r.t <= 0) { r.fired = true; game.shots.push(new Shot(r.x - 45, view.camY - 40, 110, 1250, 'arrow', 12)); }
+    if (r.fired || r.t > 0) continue;
+    r.fired = true;
+    if (r.kind === 'ice') game.shots.push(new Shot(r.x, view.camY - 40, 0, 1150 * DIFF.shot, 'ice'));
+    else if (r.kind === 'spike') game.shots.push(new Shot(r.x, GROUND - 24, 0, 0, 'spike'));
+    else game.shots.push(new Shot(r.x - 45, view.camY - 40, 110, 1250, 'arrow', 12));
   }
   game.rain = game.rain.filter(r => r.t > -0.6);
   for (const w of game.debris) {
@@ -265,11 +346,11 @@ function update(dt, rdt) {
   game.debris = game.debris.filter(w => w.t < 3.4);
   game.enemies = es.filter(e => !e.gone); game.dragons = game.dragons.filter(d => !d.dead); game.shots = game.shots.filter(s => !s.dead);
   if (game.state === 'play') waves(dt);
-  if (game.state === 'over') { game.overT -= rdt; if (game.overT <= 0 && overlay.hidden) showScreen('over'); }
+  if (game.state === 'over' || game.state === 'win') { game.overT -= rdt; if (game.overT <= 0 && overlay.hidden) showScreen(game.state); }
   if (game.comboT > 0) { game.comboT -= dt; if (game.comboT <= 0) game.combo = 0; }
   game.ultDark = approach(game.ultDark, game.ultOn ? 1 : 0, rdt * 3);
   updateFX(dt > 0 ? dt : rdt * 0.1);
-  if (Math.random() < rdt * 5) spawn({ x: view.camX + rand(-50, view.w + 250), y: view.camY - 10, vx: rand(-80, -30), vy: rand(30, 70), life: rand(6, 10), size: rand(2.5, 4.5), col: C.plum, kind: 'petal', drag: 0, vr: rand(-3, 3), rot: rand(0, TAU) });
+  MAP.ambient(rdt);
   camera(rdt);
   view.shake *= Math.exp(-9 * rdt); if (view.shake < 0.1) view.shake = 0;
   FX.flash = Math.max(0, FX.flash - rdt * 2.2); FX.vig = Math.max(0, FX.vig - rdt * 1.5);
@@ -280,18 +361,18 @@ function drawReflections() {
   ctx.save();
   ctx.beginPath(); ctx.rect(view.camX - 60, GROUND, view.w + 120, 150); ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.save(); ctx.translate(view.camX * 0.98 + view.w * 0.74, GROUND + 60); ctx.scale(0.4, 1.7); glow(0, 0, 60, C.moon, 0.13, false); ctx.restore();
+  ctx.save(); ctx.translate(view.camX * 0.98 + view.w * MAP.orb[0], GROUND + 60); ctx.scale(0.4, 1.7); glow(0, 0, 60, MAP.orb[1], 0.13, false); ctx.restore();
   ctx.translate(0, GROUND * 2); ctx.scale(1, -1);
-  REFLECT = true; GA = 0.22;
-  for (const p of PLATFORMS) { const L = lanternPos(p); glow(L.x, L.y, 44, C.ember, 0.7, false); }
+  REFLECT = true; GA = MAP.refl;
+  if (MAP.lamp) for (const p of PLATFORMS) { const L = lanternPos(p); glow(L.x, L.y, 44, MAP.lamp, 0.7, false); }
   ctx.globalCompositeOperation = 'source-over';
   for (const e of game.enemies) e.draw();
   game.player.draw();
-  GA = 0.14; for (const d of game.dragons) d.draw();
+  GA = MAP.refl * 0.65; for (const d of game.dragons) d.draw();
   GA = 1; REFLECT = false;
   ctx.restore();
   const g = ctx.createLinearGradient(0, GROUND, 0, GROUND + 150);
-  g.addColorStop(0, 'rgba(22,17,32,0)'); g.addColorStop(1, 'rgba(12,10,18,0.95)');
+  g.addColorStop(0, rgba(MAP.fade, 0)); g.addColorStop(1, rgba(MAP.fade, 0.95));
   ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(view.camX - 60, GROUND, view.w + 120, 150);
 }
 function drawDebris() {
@@ -315,8 +396,9 @@ function render() {
   const z = FX.zoom, sz = s * (1 + z);
   ctx.setTransform(sz, 0, 0, sz, (-view.camX + ox) * sz - view.w / 2 * s * z, (-view.camY + oy) * sz - view.h * 0.6 * s * z);
   drawGround(drawReflections); drawPlatforms();
-  ctx.strokeStyle = '#ff6a4a'; ctx.lineWidth = 2; // where the arrow rain will land
+  ctx.lineWidth = 2; // where the arrow rain, icicles or frost spikes will land
   for (const r of game.rain) {
+    ctx.strokeStyle = r.kind ? '#8fd8ff' : '#ff6a4a';
     ctx.globalAlpha = r.fired ? 0.45 : clamp(1 - r.t / 0.9, 0.15, 0.75) * (0.75 + 0.25 * Math.sin(T * 24));
     ctx.beginPath(); ctx.ellipse(r.x, GROUND + 2, 17, 4.5, 0, 0, TAU); ctx.stroke();
   }
@@ -351,6 +433,7 @@ function render() {
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
   if (FX.flash > 0) { ctx.fillStyle = `rgba(${FX.flashCol},${FX.flash * 0.5})`; ctx.fillRect(0, 0, W, H); }
+  if (game.fade > 0) { ctx.fillStyle = `rgba(5,3,8,${Math.min(1, game.fade * 1.4)})`; ctx.fillRect(0, 0, W, H); } // fade in after a scene change
 }
 let last = performance.now();
 function frame(now) {
@@ -372,7 +455,8 @@ function frame(now) {
 game.player = new Player(WORLD_W / 2);
 game.player.face = -1;
 camera(10);
+setMode(game.mode);
 setDiff(game.diff);
 showScreen('menu');
-if (document.fonts && document.fonts.load) document.fonts.load('40px "Ma Shan Zheng"', '〇一二三四五六七八九十降龍掌').catch(() => {});
+if (document.fonts && document.fonts.load) document.fonts.load('40px "Ma Shan Zheng"', '〇一二三四五六七八九十降龍掌回陣竹林禪院雪山落日古城血魔宮').catch(() => {});
 requestAnimationFrame(frame);

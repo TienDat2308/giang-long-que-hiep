@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs'
 const SRC = process.env.GAME_SRC || 'src';
 const read = f => readFileSync(`${SRC}/${f}`, 'utf8');
 const shell = read('a-shell.html'); // title, fonts, styles and markup, ending with an open <script>
-const js = ['b-core.js', 'c-fighter.js', 'd-foes.js', 'e-game.js'].map(read).join('\n');
+const js = ['b-core.js', 'b-maps.js', 'c-fighter.js', 'd-bosses.js', 'd-foes.js', 'e-game.js'].map(read).join('\n');
 
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/giang-long-que-hiep.html', `${shell}${js}</script>\n`);

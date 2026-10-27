@@ -110,7 +110,8 @@ class Dragon {
 
 // ---------- enemy projectiles: darts and blood orbs ----------
 // [damage, hit radius, lifetime] per projectile kind; arrows fly on a ballistic arc, bolts fly straight
-const SHOTS = { dart: [8, 7, 1.6], orb: [18, 22, 2.4], arrow: [10, 7, 3], bolt: [20, 10, 1.6] };
+// leaf: bamboo-leaf blade; shard: ice shard; ice: falling icicle; spike: frost spikes erupting from the ground; quake: a staff's ground wave
+const SHOTS = { dart: [8, 7, 1.6], orb: [18, 22, 2.4], arrow: [10, 7, 3], bolt: [20, 10, 1.6], leaf: [9, 9, 2.2], shard: [12, 9, 2], ice: [13, 10, 2], spike: [14, 26, 0.5], quake: [15, 30, 2.2] };
 class Shot {
   constructor(x, y, vx, vy, kind, dmg) {
     const D = SHOTS[kind];
@@ -122,10 +123,18 @@ class Shot {
     this.x += this.vx * dt; this.y += this.vy * dt;
     if (this.kind === 'orb' && Math.random() < 0.85) spawn({ x: this.x, y: this.y, vx: -this.vx * 0.1 + rand(-40, 40), vy: rand(-40, 40), life: 0.4, size: rand(4, 9), col: C.blood });
     if (this.kind === 'bolt' && Math.random() < 0.9) spawn({ x: this.x, y: this.y, vx: -this.vx * 0.05, vy: rand(-30, 30), life: 0.3, size: rand(3, 6), col: C.ember });
-    const b = pl.body();
-    if (this.dmg > 0 && pl.state !== 'dead' && this.x > b.x - this.r && this.x < b.x + b.w + this.r && this.y > b.y - this.r && this.y < b.y + b.h + this.r) {
-      if (!(pl.inv > 0 || pl.state === 'dash' || pl.state === 'ult')) { hurtPlayer(this.dmg, Math.sign(this.vx) || 1); this.dead = true; burst(this.x, this.y, 12, C.blood, 260); }
+    if ((this.kind === 'shard' || this.kind === 'ice') && Math.random() < 0.6) spawn({ x: this.x, y: this.y, vx: rand(-30, 30), vy: rand(-30, 30), life: 0.35, size: rand(2, 4), col: ICE });
+    if (this.kind === 'quake' && Math.random() < 0.9) spawn({ x: this.x + rand(-20, 20), y: GROUND - 2, vx: rand(-60, 60), vy: rand(-260, -80), life: 0.4, size: rand(2, 4), col: C.gold, kind: 'spark', grav: 900 });
+    if (this.kind === 'spike' && this.t < 0.05 && !this.cracked) { this.cracked = true; burst(this.x, GROUND - 10, 10, ICE, 260); sfx('clang'); }
+    const b = pl.body(), live = this.kind !== 'spike' || (this.t > 0.08 && this.t < 0.4);
+    if (live && this.dmg > 0 && pl.state !== 'dead' && this.x > b.x - this.r && this.x < b.x + b.w + this.r && this.y > b.y - this.r && this.y < b.y + b.h + this.r) {
+      if (!(pl.inv > 0 || pl.state === 'dash' || pl.state === 'ult')) {
+        hurtPlayer(this.dmg, Math.sign(this.vx) || Math.sign(pl.x - this.x) || 1);
+        if (this.kind !== 'spike' && this.kind !== 'quake') this.dead = true;
+        burst(this.x, this.y, 12, this.kind === 'leaf' ? LEAF : this.kind === 'orb' || this.kind === 'dart' || this.kind === 'arrow' ? C.blood : ICE, 260);
+      }
     }
+    if (this.kind === 'ice' && this.y > GROUND - 4) { burst(this.x, GROUND - 4, 14, ICE, 300); this.dead = true; }
     if (this.y > GROUND) {
       if (this.kind === 'arrow' || this.kind === 'bolt') { // arrows stay stuck in the stone for a moment
         const a = Math.atan2(this.vy, this.vx);
@@ -144,6 +153,28 @@ class Shot {
       else glow(this.x, this.y, 12, C.white, 0.35);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
       drawWeapon('arrow', this.x - Math.cos(a) * 38, this.y - Math.sin(a) * 38, a, bolt ? 1.3 : 1, 1);
+    } else if (this.kind === 'leaf') { // spinning bamboo-leaf blade
+      glow(this.x, this.y, 18, LEAF, 0.7);
+      ctx.globalCompositeOperation = 'source-over'; ctx.translate(this.x, this.y); ctx.rotate(this.t * 22);
+      ctx.fillStyle = '#9fe0a0'; ctx.beginPath(); ctx.ellipse(0, 0, 11, 3.2, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#2f6a3a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
+    } else if (this.kind === 'shard' || this.kind === 'ice') { // ice: a shard along its flight, an icicle point-down
+      const a = Math.atan2(this.vy, this.vx), L = this.kind === 'ice' ? 30 : 22;
+      glow(this.x, this.y, 26, ICE, 0.7);
+      ctx.translate(this.x, this.y); ctx.rotate(a); ctx.fillStyle = 'rgba(210,240,255,0.95)';
+      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-L * 0.4, -4); ctx.lineTo(-L, 0); ctx.lineTo(-L * 0.4, 4); ctx.closePath(); ctx.fill();
+    } else if (this.kind === 'spike') { // a crown of frost spikes bursting up out of the ground
+      const k = this.t < 0.08 ? this.t / 0.08 : this.t > 0.4 ? Math.max(0, 1 - (this.t - 0.4) / 0.1) : 1;
+      glow(this.x, GROUND - 20, 40, ICE, 0.6 * k);
+      ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = 'rgba(200,236,255,0.92)'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1;
+      for (const [dx, h] of [[-14, 30], [0, 52], [12, 38], [-6, 22], [20, 20]]) {
+        ctx.beginPath(); ctx.moveTo(this.x + dx - 6, GROUND); ctx.lineTo(this.x + dx, GROUND - h * k); ctx.lineTo(this.x + dx + 6, GROUND); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    } else if (this.kind === 'quake') { // a rolling arc of golden force along the ground
+      const dir = Math.sign(this.vx) || 1;
+      glow(this.x, GROUND - 16, 46, C.gold, 0.7);
+      ctx.strokeStyle = 'rgba(255,214,120,0.9)'; ctx.lineWidth = 3;
+      for (let i = 0; i < 3; i++) { ctx.globalAlpha = 1 - i * 0.3; ctx.beginPath(); ctx.ellipse(this.x - dir * i * 16, GROUND, 14 + i * 4, 34 - i * 6, 0, Math.PI, TAU); ctx.stroke(); }
     } else if (this.kind === 'dart') {
       const a = Math.atan2(this.vy, this.vx);
       ctx.strokeStyle = rgba(C.ember, 0.9); ctx.lineWidth = 2.5; ctx.beginPath();
@@ -160,7 +191,7 @@ class Shot {
 
 // ---------- weapons ----------
 // drawn in the hand's local frame: +x runs from the grip out along the blade
-const WEAPONS = { dao: { len: 45, grip: 0.22 }, kiem: { len: 59, grip: 0.1 }, chuy: { len: 60, grip: 0 }, tieu: { len: 22, grip: 0.3 }, bow: { len: 10, grip: 0 } };
+const WEAPONS = { dao: { len: 45, grip: 0.22 }, kiem: { len: 59, grip: 0.1 }, chuy: { len: 60, grip: 0 }, tieu: { len: 22, grip: 0.3 }, bow: { len: 10, grip: 0 }, truong: { len: 64, grip: 0.05 } };
 function bladeOf(e) {
   const J = e.J, W = WEAPONS[e.d.weapon], a = Math.atan2(J.h1.y - J.e1.y, J.h1.x - J.e1.x) - e.face * W.grip, s = e.s;
   return { x: J.h1.x, y: J.h1.y, a, bx: J.h1.x + Math.cos(a) * 12 * s, by: J.h1.y + Math.sin(a) * 12 * s, tx: J.h1.x + Math.cos(a) * W.len * s, ty: J.h1.y + Math.sin(a) * W.len * s };
@@ -185,6 +216,10 @@ function drawWeapon(kind, x, y, a, s, face, drawn = false) {
     for (let i = 0; i < 8; i++) { const q = i * TAU / 8; line('#b3aec0', 2.4, 50 + Math.cos(q) * 8, Math.sin(q) * 8, 50 + Math.cos(q) * 15, Math.sin(q) * 15); }
     ctx.fillStyle = '#5f5b6c'; ctx.beginPath(); ctx.arc(50, 0, 10, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#a7a2b8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(50, 0, 7, -2.4, -1.0); ctx.stroke();
+  } else if (kind === 'truong') { // 禪杖: a monk's long staff held mid-shaft, rings jangling at the head
+    line('#6b4a2e', 4.6, -38, 0, 60, 0); line('#b08850', 5, -40, 0, -34, 0);
+    ctx.strokeStyle = '#d9b46a'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.ellipse(66, 0, 9, 7, 0, 0, TAU); ctx.stroke();
+    for (const ry of [-6, 0, 6]) { ctx.beginPath(); ctx.arc(66 + Math.sin(T * 9 + ry) * 1.5, ry, 3, 0, TAU); ctx.stroke(); }
   } else if (kind === 'bow') { // recurve bow held across the arm; the string is drawn separately while aiming
     ctx.strokeStyle = '#8a5a2e'; ctx.lineWidth = 3.2; ctx.beginPath(); ctx.moveTo(-7, -26); ctx.quadraticCurveTo(12, 0, -7, 26); ctx.stroke();
     ctx.fillStyle = '#f2b544';
@@ -219,8 +254,11 @@ const ETYPES = {
   thug: { hp: 48, s: 1, spd: 150, dmg: 9, range: 66, wind: 0.42, score: 100, c: [255, 92, 74], lw: 4, hat: true, weapon: 'dao' },
   dart: { hp: 34, s: 0.94, spd: 175, dmg: 8, range: 0, wind: 0.5, score: 150, c: [255, 152, 74], lw: 3.6, hat: true, ranged: true, weapon: 'tieu', keep: [240, 420] },
   archer: { hp: 36, s: 0.96, spd: 165, dmg: 10, range: 0, wind: 0.65, score: 170, c: [196, 140, 255], lw: 3.6, ranged: true, weapon: 'bow', keep: [300, 440] },
-  heavy: { hp: 140, s: 1.3, spd: 95, dmg: 18, range: 92, wind: 0.75, score: 280, c: [232, 64, 76], lw: 5.5, armor: true, weapon: 'chuy' },
+  heavy: { hp: 140, s: 1.3, spd: 95, dmg: 18, range: 92, wind: 0.75, score: 280, c: [232, 64, 76], lw: 5.5, armor: true, smash: true, weapon: 'chuy' },
   boss: { hp: 950, s: 1.45, spd: 220, dmg: 16, range: 96, wind: 0.55, score: 3000, c: [242, 84, 132], lw: 5, armor: true, boss: true, weapon: 'kiem', name: 'Huyết Ma Lão Tổ', han: '血魔老祖', hairCol: 'rgba(110,22,52,0.95)' },
+  trucboss: { hp: 780, s: 1.32, spd: 290, dmg: 13, range: 92, wind: 0.42, score: 2500, c: [120, 232, 150], lw: 4.6, armor: true, boss: true, hat: true, weapon: 'kiem', name: 'Thanh Trúc Kiếm Khách', han: '青竹劍客', hairCol: 'rgba(40,120,70,0.95)' },
+  monkboss: { hp: 1150, s: 1.75, spd: 120, dmg: 18, range: 125, wind: 0.62, score: 2800, c: [255, 190, 90], lw: 6.2, armor: true, boss: true, smash: true, weapon: 'truong', name: 'Thiết Tháp La Hán', han: '鐵塔羅漢' },
+  iceboss: { hp: 860, s: 1.32, spd: 230, dmg: 14, range: 0, wind: 0.55, score: 3000, c: [150, 220, 255], lw: 4.4, armor: true, boss: true, ranged: true, keep: [260, 440], weapon: null, name: 'Băng Phách Tiên Cơ', han: '冰魄仙姬', hairCol: 'rgba(170,225,255,0.9)' },
   archboss: { hp: 820, s: 1.4, spd: 250, dmg: 14, range: 0, wind: 0.5, score: 3500, c: [255, 140, 64], lw: 5, armor: true, boss: true, ranged: true, weapon: 'bow', keep: [280, 460], name: 'Lạc Nhật Thần Cung', han: '落日神弓', hairCol: 'rgba(150,64,22,0.95)' },
 };
 class Enemy extends Fighter {
@@ -230,13 +268,14 @@ class Enemy extends Fighter {
     Object.assign(this, { y, prevY: y, d, type, mode: 'move', cd: rand(0.6, 1.5) * DIFF.cd, poise: 0, poiseT: 0, armorT: 0, face: -1, runPh: rand(0, 9), deadT: 0, fade: 0, act: null, windT: 0.4, recT: 0.45, hits: false, slamming: false, landed: y >= GROUND, gone: false, spin: 0, tumble: 0, tumbleR: 0, escT: 0, aimA: 0, aimX: 0, aimY: 0, leapShot: false });
     this.col = rgba(d.c, 1); this.backCol = rgba(d.c, 0.5); this.lw = d.lw; this.trail = [];
     if (y < GROUND) this.ground = false;
-    if (d.boss) { this.hair = new Ribbon(11, 9); this.glowCol = rgba(d.c, 0.6); this.glowBlur = 14; }
+    if (d.boss) { this.hair = d.hairCol ? new Ribbon(11, 9) : null; this.glowCol = rgba(d.c, 0.6); this.glowBlur = 14; }
   }
   update(dt, pl) {
     if (dt <= 0) { this.computeJ(); return; }
     this.st += dt; this.flashT = Math.max(0, this.flashT - dt); this.cd -= dt; this.escT -= dt;
     this.poiseT -= dt; this.armorT = Math.max(0, this.armorT - dt);
     if (this.dead) return this.updDead(dt);
+    const ai = BOSS_AI[this.type]; if (ai && ai.tick) ai.tick(this, dt, pl);
     const wasGround = this.ground, d = this.d, dx = pl.x - this.x, adx = Math.abs(dx);
     let tgt = null;
     if (this.stun > 0) {
@@ -263,7 +302,7 @@ class Enemy extends Fighter {
         else want = -this.face * 0.3;
         if (this.ground && pl.ground && pl.y < this.y - 50 && adx < 230 && this.cd <= 0) { this.vy = -980; this.vx = this.face * 220; this.ground = false; this.cd = 0.9; this.flip = 1; this.flipT = 0; }
       }
-      if (this.ground) this.vx += (want * d.spd - this.vx) * (1 - Math.exp(-8 * dt));
+      if (this.ground) this.vx += (want * d.spd * (this.spdMul || 1) - this.vx) * (1 - Math.exp(-8 * dt));
     } else if (this.mode === 'wind') {
       this.vx = approach(this.vx, 0, 1500 * dt);
       if (this.act === 'shoot') this.aimA = this.solveAim(pl, 820);
@@ -277,7 +316,7 @@ class Enemy extends Fighter {
     } else if (this.mode === 'atk') this.updAct(dt, pl);
     else if (this.mode === 'rec') {
       this.vx = approach(this.vx, 0, 1200 * dt);
-      if (this.st > this.recT) { this.mode = 'move'; this.st = 0; this.cd = rand(0.8, 1.7) * (d.boss ? 0.55 : 1) * DIFF.cd; }
+      if (this.st > this.recT) { this.mode = 'move'; this.st = 0; this.cd = rand(0.8, 1.7) * (d.boss ? 0.55 : 1) * DIFF.cd * (this.cdMul || 1); }
     }
     this.physics(dt);
     if (this.ground && !wasGround) {
@@ -293,7 +332,7 @@ class Enemy extends Fighter {
     }
     this.computeJ();
     for (const q of this.trail) q.age += dt;
-    if (this.mode === 'atk' && this.d.weapon !== 'tieu' && (this.act === 'melee' || this.act === 'dashP' || this.act === 'slam')) { const b = bladeOf(this); this.trail.unshift({ bx: b.bx, by: b.by, tx: b.tx, ty: b.ty, age: 0 }); }
+    if (this.mode === 'atk' && this.d.weapon && this.d.weapon !== 'tieu' && this.d.weapon !== 'bow' && (this.act === 'melee' || this.act === 'dashP' || this.act === 'slam')) { const b = bladeOf(this); this.trail.unshift({ bx: b.bx, by: b.by, tx: b.tx, ty: b.ty, age: 0 }); }
     while (this.trail.length && this.trail[this.trail.length - 1].age > 0.14) this.trail.pop();
     if (this.hair) this.hair.update(this.J.sa.x, this.J.sa.y, dt);
     if (d.boss && Math.random() < dt * 22) spawn({ x: this.x + rand(-26, 26), y: this.y - rand(0, 120), vy: rand(-90, -40), vx: rand(-20, 20), life: rand(0.5, 1), size: rand(2, 4), col: d.c, kind: 'ember', drag: 0.5, rot: rand(0, 9) });
@@ -301,7 +340,7 @@ class Enemy extends Fighter {
   begin(kind) {
     this.mode = 'wind'; this.st = 0; this.act = kind; this.hits = false; this.leapShot = false;
     const pl = game.player; if (Math.abs(pl.x - this.x) > 4) this.face = pl.x > this.x ? 1 : -1;
-    this.windT = ({ throw: 0.5, orb: 0.65, dashP: 0.5, slam: 0.35, shoot: this.d.boss ? 0.5 : 0.65, snipe: 0.85, rain: 0.6, leap: 0.12 }[kind] ?? this.d.wind) * DIFF.wind;
+    this.windT = (BOSS_AI[this.type]?.wind?.[kind] ?? { throw: 0.5, orb: 0.65, dashP: 0.5, slam: 0.35, shoot: this.d.boss ? 0.5 : 0.65, snipe: 0.85, rain: 0.6, leap: 0.12 }[kind] ?? this.d.wind) * DIFF.wind;
   }
   // elevation (radians above level) for a low ballistic arc that lands on the hero's chest
   solveAim(pl, v, spread = 0) {
@@ -316,7 +355,8 @@ class Enemy extends Fighter {
   }
   bossThink(adx) {
     if (this.cd > 0 || game.ultOn) return;
-    const r = Math.random();
+    const r = Math.random(), ai = BOSS_AI[this.type];
+    if (ai && ai.think && ai.think(this, adx, r)) return;
     if (this.type === 'archboss') {
       if (adx < 180 && this.ground) this.begin('leap');
       else this.begin(r < 0.38 ? 'snipe' : r < 0.68 ? 'rain' : 'shoot');
@@ -328,9 +368,10 @@ class Enemy extends Fighter {
   }
   fire(pl) {
     this.mode = 'atk'; this.st = 0; const k = this.act, s = this.s;
+    if (BOSS_AI[this.type]?.fire?.(this, k, pl)) return;
     if (k === 'melee') {
-      this.vx = this.face * (this.type === 'heavy' ? 120 : 260); sfx('swing');
-      if (this.type === 'heavy') { ring(this.x + this.face * 60, this.y, 10, 110, 0.4, C.blood, 6, { flat: 0.3 }); shake(6); sfx('heavy'); dust(this.x + this.face * 60, this.y, 8); }
+      this.vx = this.face * (this.d.smash ? 120 : 260); sfx('swing');
+      if (this.d.smash) { ring(this.x + this.face * 60, this.y, 10, 110, 0.4, C.blood, 6, { flat: 0.3 }); shake(6); sfx('heavy'); dust(this.x + this.face * 60, this.y, 8); }
     } else if (k === 'throw') {
       const hx = this.x + this.face * 20, hy = this.y - 64 * s, n = game.wave >= 6 ? 3 : 1, sp = 720 * DIFF.shot;
       for (let i = 0; i < n; i++) {
@@ -362,6 +403,7 @@ class Enemy extends Fighter {
     }
   }
   updAct(dt, pl) {
+    if (BOSS_AI[this.type]?.act?.(this, dt, pl)) return;
     const k = this.act, t = this.st, s = this.s;
     if (k === 'melee') {
       this.vx = approach(this.vx, 0, 1400 * dt);
@@ -369,7 +411,7 @@ class Enemy extends Fighter {
         const r = this.d.range + 12, box = { x: this.face > 0 ? this.x : this.x - r, y: this.y - 82 * s, w: r, h: 74 * s };
         if (overlap(box, pl.body())) { this.hits = true; hurtPlayer(this.d.dmg, this.face); }
       }
-      if (t > 0.18) { this.mode = 'rec'; this.st = 0; this.recT = this.type === 'heavy' ? 0.7 : 0.5; }
+      if (t > 0.18) { this.mode = 'rec'; this.st = 0; this.recT = this.d.smash ? 0.7 : 0.5; }
     } else if (k === 'dashP') {
       if (Math.random() < 0.8) spawn({ x: this.x, y: this.y - rand(10, 110), vx: -this.vx * 0.2, life: 0.3, size: rand(3, 6), col: C.blood });
       if (!this.hits && overlap(this.body(), pl.body())) { this.hits = true; hurtPlayer(this.d.dmg, this.face); }
@@ -386,7 +428,8 @@ class Enemy extends Fighter {
     this.mode = 'rec'; this.st = 0; this.recT = 0.7;
   }
   poseFor(dt) {
-    const m = this.mode, k = this.act, heavy = this.type === 'heavy', blade = this.d.weapon === 'dao' || this.d.weapon === 'kiem';
+    const bp = BOSS_AI[this.type]?.pose?.(this); if (bp) return bp;
+    const m = this.mode, k = this.act, heavy = !!this.d.smash, blade = this.d.weapon === 'dao' || this.d.weapon === 'kiem';
     const bowAct = k === 'shoot' || k === 'snipe' || k === 'rain';
     if ((m === 'wind' && bowAct) || (m === 'atk' && k === 'leap')) return aimPose(this.aimA, false);
     if (m === 'rec' && bowAct) return aimPose(this.aimA, true);
@@ -458,7 +501,7 @@ class Enemy extends Fighter {
     if (this.d.weapon === 'bow') { if (!this.dead) this.drawBow(J); }
     else if (this.d.weapon && !dropped) {
       if (this.trail.length > 1) { // sword light following the swing
-        ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = rgba(this.d.boss ? C.blood : this.type === 'heavy' ? [210, 190, 170] : C.white, 1);
+        ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = rgba(this.d.boss ? C.blood : this.d.smash ? [210, 190, 170] : C.white, 1);
         for (let i = 0; i < this.trail.length - 1; i++) {
           const a = this.trail[i], b = this.trail[i + 1], k = 1 - a.age / 0.14;
           ctx.globalAlpha = 0.55 * k * k * GA; ctx.beginPath();
@@ -474,12 +517,13 @@ class Enemy extends Fighter {
     if (this.d.boss && !this.dead) glow(J.head.x + this.face * 3.5 * s, J.head.y - 1.5 * s, 9 * s, this.type === 'archboss' ? [255, 180, 90] : [255, 90, 90], 1);
     if (this.mode === 'wind' && !this.dead && this.stun <= 0 && this.d.weapon !== 'bow') { // telegraph: a gleam runs up the blade before the strike
       const k = clamp(this.st / this.windT, 0, 1);
-      if (this.d.weapon !== 'tieu' && (this.act === 'melee' || this.act === 'dashP' || this.act === 'slam')) {
+      if (this.d.weapon && this.d.weapon !== 'tieu' && (this.act === 'melee' || this.act === 'dashP' || this.act === 'slam')) {
         const b = bladeOf(this), q = 0.25 + 0.75 * k;
         glow(lerp(b.x, b.tx, q), lerp(b.y, b.ty, q), 11 * s, C.white, 0.9);
         if (k > 0.65) drawFlare(b.tx, b.ty, (k - 0.65) / 0.35 * 26 * s, T * 3, C.white, 1);
       } else glow(J.h1.x, J.h1.y, (14 + 30 * k) * s, C.blood, 0.35 + 0.65 * k);
     }
+    BOSS_AI[this.type]?.draw?.(this, J);
     if (!this.dead && !this.d.boss && this.hp < this.maxHp && !REFLECT) {
       const w = 34 * s, x = this.x - w / 2, y = this.y - 116 * s;
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;

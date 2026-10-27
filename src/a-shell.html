@@ -117,6 +117,7 @@ body.touch .touchhelp{display:block}
 .ghost{font:600 15px var(--f-body);background:transparent;color:var(--paper);border:1px solid var(--line);padding:11px 18px;cursor:pointer}
 .ghost:hover{border-color:var(--gold)}
 .seg:focus-visible,.ghost:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.cleared{font-size:12px;letter-spacing:.06em;color:#1a1206;background:var(--gold);padding:3px 8px;border-radius:2px}
 .best{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mist)}
 .best b{font:700 20px var(--f-display);letter-spacing:0;color:var(--paper);margin-left:6px;font-variant-numeric:tabular-nums}
 .stat{margin:0;font-size:16px;color:var(--mist)}
@@ -196,7 +197,7 @@ body.touch .touchhelp{display:block}
         <h1>Giáng Long Que Hiệp</h1>
       </div>
     </header>
-    <p class="lede">Một thân khinh công, mười tám chưởng hàng long. Trụ vững trên mái ngói dưới trăng trước đao khách, cung thủ, ám khí thủ và thiết chùy của Huyết Ma giáo. Cứ mỗi đợt thứ năm, Huyết Ma Lão Tổ hoặc Lạc Nhật Thần Cung sẽ xuất hiện.</p>
+    <p class="lede">Một thân khinh công, mười tám chưởng hàng long. Băng qua rừng trúc, thiền viện, tuyết sơn, cổ thành lúc hoàng hôn rồi tiến vào Huyết Ma Cung, hạ năm đại ma đầu của Huyết Ma giáo.</p>
     <dl class="keys">
       <dt><kbd>A</kbd><kbd>D</kbd></dt><dd>Di chuyển</dd>
       <dt><kbd>W</kbd><kbd>Space</kbd></dt><dd>Nhảy ba tầng: lần hai lộn nhào, lần ba lộn hai vòng. Giữ phím khi đang rơi để lướt gió.</dd>
@@ -205,6 +206,9 @@ body.touch .touchhelp{display:block}
       <dt><kbd>J</kbd></dt><dd>Đứng yên: quyền chưởng bốn thế, thế cuối lộn ngược hất địch lên trời. Trên không: lộn nhào cước, bấm tiếp để phi cước bổ xuống.</dd>
       <dt><kbd>A</kbd>/<kbd>D</kbd>+<kbd>J</kbd></dt><dd>Cước pháp: cước thẳng, <b>Hồi Toàn Cước</b>, <b>Xuyên Phong Cước</b>, <b>Phủ Sơn Cước</b> bổ nứt đất. Đang chạy nhanh thì mở đầu bằng <b>Phi Tất</b> (gối bay).</dd>
       <dt><kbd>S</kbd>+<kbd>J</kbd></dt><dd><b>Tảo Đường Cước</b> quét ngã địch, bấm tiếp để lộn ngược hất lên.</dd>
+      <dt><kbd>K</kbd>→<kbd>J</kbd></dt><dd>Đang lướt bấm đánh: <b>Phi Yến Cước</b> bay ngang đá xuyên hàng địch, kết bằng lộn ngược.</dd>
+      <dt><kbd>W</kbd>→<kbd>J</kbd></dt><dd>Vừa bật nhảy bấm đánh: <b>Song Phi Cước</b> đá kéo hai chân rồi lộn nhào. Trên không giữ <kbd>S</kbd> bấm <kbd>J</kbd>: <b>Thiên Cân Trụy</b> đạp thẳng xuống, trúng địch thì bật lên.</dd>
+      <dt>Rơi trúng đầu</dt><dd><b>Đạp Tuyết Vô Ngân</b>: đạp đầu địch bật lên lộn santo, hồi lại hai lần nhảy.</dd>
       <dt><kbd>U</kbd></dt><dd><b>Kháng Long Hữu Hối</b> · 30 nội lực: một chưởng rồng xuyên thẳng</dd>
       <dt><kbd>I</kbd></dt><dd><b>Phi Long Tại Thiên</b> · 40: vọt lên trời rồi giáng chưởng xuống đất</dd>
       <dt><kbd>O</kbd></dt><dd><b>Thần Long Bãi Vĩ</b> · 25: xoay người quét vĩ hai bên</dd>
@@ -212,7 +216,14 @@ body.touch .touchhelp{display:block}
       <dt><kbd>H</kbd></dt><dd><b>Hồng Tiệm Ư Lục</b> · 35: dang cánh hồng nhạn sà xuống, cuốn địch theo rồi tung chưởng</dd>
       <dt><kbd>L</kbd></dt><dd><b>Giáng Long Thập Bát Chưởng</b> · đầy nội lực: mười tám rồng vàng truy kích</dd>
     </dl>
-    <p class="touchhelp">Hai nút ◀ ▶ để di chuyển. Nhảy ba tầng có lộn nhào, giữ Nhảy khi rơi để lướt gió. Bấm Đánh liên tục khi đứng yên ra quyền chưởng, giữ ◀ ▶ khi bấm ra cước pháp, giữ ▼ ra Tảo Đường Cước, đang chạy nhanh thì mở đầu bằng gối bay. Năm ấn chữ Hán là năm chiêu Giáng Long, ấn 降 là đủ mười tám chưởng. Ấn sáng lên khi đủ nội lực. Xoay ngang máy để thấy rộng hơn.</p>
+    <p class="touchhelp">Hai nút ◀ ▶ để di chuyển. Nhảy ba tầng có lộn nhào, giữ Nhảy khi rơi để lướt gió. Bấm Đánh liên tục khi đứng yên ra quyền chưởng, giữ ◀ ▶ khi bấm ra cước pháp, giữ ▼ ra Tảo Đường Cước, đang chạy nhanh thì mở đầu bằng gối bay. Bấm Lướt rồi Đánh ra Phi Yến Cước, vừa nhảy lên bấm Đánh ra Song Phi Cước, rơi trúng đầu địch thì tự đạp bật lên. Năm ấn chữ Hán là năm chiêu Giáng Long, ấn 降 là đủ mười tám chưởng. Ấn sáng lên khi đủ nội lực. Xoay ngang máy để thấy rộng hơn.</p>
+    <div class="diffbox">
+      <div class="diff" role="radiogroup" aria-label="Chế độ chơi">
+        <button class="seg" role="radio" data-mode="campaign">Phá đảo</button>
+        <button class="seg" role="radio" data-mode="endless">Sinh tồn</button>
+      </div>
+      <p class="diffNote" id="modeNote"></p>
+    </div>
     <div class="diffbox">
       <div class="diff" role="radiogroup" aria-label="Độ khó">
         <button class="seg" role="radio" data-diff="easy">Dễ</button>
@@ -221,7 +232,7 @@ body.touch .touchhelp{display:block}
       </div>
       <p class="diffNote" id="diffNote"></p>
     </div>
-    <div class="row"><button id="startBtn" class="cta">Vào trận</button><span class="best">Kỷ lục mức này<b id="best">0</b></span></div>
+    <div class="row"><button id="startBtn" class="cta">Vào trận</button><span class="best">Kỷ lục<b id="best">0</b></span><span class="cleared" id="clearMark" hidden>Đã phá đảo mức này</span></div>
   </section>
   <section class="panel" data-screen="pause" hidden>
     <h2>Tạm nghỉ</h2>
@@ -230,8 +241,14 @@ body.touch .touchhelp{display:block}
   </section>
   <section class="panel" data-screen="over" hidden>
     <header class="ttl"><div class="seal" aria-hidden="true">敗</div><h2>Que Hiệp gục ngã</h2></header>
-    <p class="stat">Mức <b id="ovDiff">Vừa</b> · trụ đến đợt <b id="ovWave">1</b> · <b id="ovScore">0</b> điểm · kỷ lục <b id="ovBest">0</b></p>
-    <div class="row"><button id="againBtn" class="cta">Đấu lại</button><button id="menuBtn" class="ghost">Đổi độ khó</button></div>
+    <p class="stat"><b id="ovDiff">Phá đảo · Vừa</b> · gục ở <b id="ovWave">hồi 1</b> · <b id="ovScore">0</b> điểm · kỷ lục <b id="ovBest">0</b></p>
+    <div class="row"><button id="retryBtn" class="cta">Đấu lại hồi này</button><button id="againBtn" class="ghost">Chơi lại từ đầu</button><button id="menuBtn" class="ghost">Về màn chính</button></div>
+  </section>
+  <section class="panel" data-screen="win" hidden>
+    <header class="ttl"><div class="seal" aria-hidden="true">勝</div><h2>Phá đảo!</h2></header>
+    <p class="lede">Năm hồi, năm cảnh, năm đại ma đầu đều đã gục dưới Giáng Long Thập Bát Chưởng. Huyết Ma giáo tan rã.</p>
+    <p class="stat">Mức <b id="wnDiff">Vừa</b> · thời gian <b id="wnTime">0:00</b> · <b id="wnScore">0</b> điểm · kỷ lục <b id="wnBest">0</b></p>
+    <div class="row"><button id="winAgainBtn" class="cta">Chơi lại</button><button id="winMenuBtn" class="ghost">Về màn chính</button></div>
   </section>
 </div>
 

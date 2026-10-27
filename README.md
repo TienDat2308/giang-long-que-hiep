@@ -1,6 +1,10 @@
 # Giáng Long Que Hiệp
 
-Game người que kiếm hiệp chạy trên trình duyệt, Android và iOS. Nhân vật dùng khinh công ba tầng, quyền cước nhiều lộ và năm chiêu Giáng Long Thập Bát Chưởng để đánh từng đợt Huyết Ma giáo đồ: đao khách, cung thủ, ám khí thủ, thiết chùy, cùng hai boss Huyết Ma Lão Tổ và Lạc Nhật Thần Cung. Có ba mức Dễ, Vừa và Khó.
+Game người que kiếm hiệp chạy trên trình duyệt, Android và iOS. Nhân vật dùng khinh công ba tầng, quyền cước nhào lộn nhiều lộ và năm chiêu Giáng Long Thập Bát Chưởng để đánh Huyết Ma giáo đồ: đao khách, cung thủ, ám khí thủ, thiết chùy.
+
+- **Phá đảo:** năm hồi, mỗi hồi là một cảnh riêng với ba đợt địch và một trùm. Các hồi lần lượt là Rừng Trúc (Thanh Trúc Kiếm Khách), Thiền Viện (Thiết Tháp La Hán), Tuyết Sơn (Băng Phách Tiên Cơ), Lạc Nhật Cổ Thành (Lạc Nhật Thần Cung) và Huyết Ma Cung (Huyết Ma Lão Tổ, có giai đoạn hai). Thua thì đấu lại đúng hồi đang dở.
+- **Sinh tồn:** đánh vô hạn để lấy điểm kỷ lục, cứ năm đợt đổi cảnh và gặp một trùm.
+- Ba mức Dễ, Vừa, Khó. Kỷ lục được lưu riêng cho từng chế độ và từng mức.
 
 - **Chơi ngay trên web:** https://tiendat2308.github.io/giang-long-que-hiep/
 - **Tải bản mobile:** mục [Releases → mobile-latest](https://github.com/TienDat2308/giang-long-que-hiep/releases/tag/mobile-latest)
@@ -25,6 +29,10 @@ Bản APK được ký bằng khóa debug, dùng để cài trực tiếp và ch
 | `W` / `Space` | Nhảy ba tầng (lộn nhào), giữ khi rơi để lướt gió |
 | `K` / `Shift` | Lăng Ba Vi Bộ: lướt né |
 | `J` | Đứng yên: quyền chưởng. Giữ hướng: cước pháp. Giữ `S`: Tảo Đường Cước. Đang chạy: Phi Tất. Trên không: lộn nhào cước rồi phi cước |
+| `K` rồi `J` | Phi Yến Cước: bay ngang đá xuyên hàng địch, kết bằng lộn ngược |
+| `W` rồi `J` | Song Phi Cước: vừa bật lên đá kéo hai chân rồi lộn nhào |
+| Trên không `S` + `J` | Thiên Cân Trụy: đạp thẳng xuống, trúng địch thì bật lên lộn santo |
+| Rơi trúng đầu địch | Đạp Tuyết Vô Ngân: tự đạp bật lên, hồi lại hai lần nhảy |
 | `U` `I` `O` `Y` `H` | Kháng Long Hữu Hối, Phi Long Tại Thiên, Thần Long Bãi Vĩ, Kiến Long Tại Điền, Hồng Tiệm Ư Lục |
 | `L` | Giáng Long Thập Bát Chưởng (cần đầy nội lực) |
 | `P` / `Esc` | Tạm dừng |
@@ -46,10 +54,12 @@ Mã game nằm trong `src/` và được ghép thành một trang duy nhất:
 | File | Nội dung |
 |---|---|
 | `src/a-shell.html` | Giao diện, HUD, nút cảm ứng, màn hình chính |
-| `src/b-core.js` | Canvas, điều khiển, âm thanh, hiệu ứng, cảnh nền |
+| `src/b-core.js` | Canvas, điều khiển, âm thanh, hiệu ứng |
+| `src/b-maps.js` | Năm cảnh: trời, núi, đạo cụ, nền đất, bục đứng, thời tiết |
 | `src/c-fighter.js` | Bộ xương người que, nhân vật chính, đòn đánh và các chiêu Giáng Long |
-| `src/d-foes.js` | Rồng, ám khí, binh khí, các loại địch và boss |
-| `src/e-game.js` | Vòng lặp game, độ khó, các đợt địch, HUD |
+| `src/d-bosses.js` | Đòn riêng của từng boss |
+| `src/d-foes.js` | Rồng, đạn và ám khí, binh khí, các loại địch |
+| `src/e-game.js` | Vòng lặp game, chế độ chơi, độ khó, các đợt địch, HUD |
 
 **Android tại máy:** cần JDK 21 và Android SDK. Chạy `npm run android` để build lại, áp cấu hình và mở Android Studio.
 

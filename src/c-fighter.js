@@ -26,6 +26,9 @@ const POSES = {
   sweepW: P(0.4, 0.1, 1.2, 2.0, -0.2, 0.5, 1.3, -0.1, 1.2, -0.3),
   sweep: P(0.55, 0.25, 0.9, 1.4, -0.4, 0.2, 1.0, 1.1, 1.4, -0.2),
   knee: P(0.3, 0.2, -1.2, -1.6, -1.4, -1.7, 2.1, 0.3, -0.6, -1.4),
+  sideK: P(-0.65, 0.3, -1.0, -0.6, 1.4, 2.1, 1.6, 1.6, 0.4, -0.8),
+  kick2: P(-0.35, 0.25, -1.0, -0.5, 1.0, 2.1, -0.4, -1.0, 1.7, 1.62),
+  stomp: P(0.1, 0.25, 2.5, 2.9, -2.4, -2.8, 0.12, 0.05, -0.3, -0.9),
   land: P(0.3, 0.1, 1.2, 2.1, 0.5, 2.4, 1.15, 0, -0.65, -0.55),
   skid: P(-0.28, -0.05, 1.0, 1.9, 0.3, 2.2, 0.75, 0.35, -0.35, -0.15),
   gather: P(-0.12, -0.1, -0.35, 1.3, -0.6, 1.1, 0.75, 0.2, -0.75, -0.3),
@@ -234,6 +237,13 @@ function axeImpact(p) {
 }
 const AIRFLIP = { w: 'tuck', p: 'kick', a: 0.02, b: 0.3, dur: 0.36, round: 80, dmg: 12, kb: [320, -380], stun: 0.5, limb: 'f1', gold: true, flip: 1, air: 'flip' };
 const AIRKICK = { w: 'airkick', p: 'airkick', a: 0.03, b: 9, dur: 9, box: [-6, -50, 64, 56], dmg: 12, kb: [380, -260], stun: 0.45, air: 'dive', limb: 'f1', gold: true };
+// santo: the somersault that ends the move if still airborne (1 forward, -1 backward); twin: time of the second kick
+// dash then attack: a flying side kick that pierces a line of foes
+const FLYK = { w: 'airkick', p: 'sideK', a: 0.03, b: 0.3, dur: 0.4, box: [-6, -84, 96, 60], dmg: 14, kb: [560, -300], stun: 0.6, limb: 'f1', gold: true, air: 'fly', act: 'knee', name: 'Phi Yến Cước', santo: -1 };
+// attack while still rising: a scissor double kick
+const SONGPHI = { w: 'tuck', p: 'kick', a: 0.04, b: 0.32, dur: 0.38, box: [0, -84, 86, 62], dmg: 9, kb: [260, -240], stun: 0.45, limb: 'f1', gold: true, air: 'double', twin: 0.17, name: 'Song Phi Cước', santo: 1 };
+// airborne, down and attack: drop like a stone; a foe underfoot becomes a springboard
+const STOMP = { w: 'tuck', p: 'stomp', a: 0.06, b: 9, dur: 9, box: [-26, -34, 52, 44], dmg: 14, kb: [140, -420], stun: 0.6, limb: 'f1', gold: true, air: 'stomp', name: 'Thiên Cân Trụy' };
 
 class Player extends Fighter {
   constructor(x) {
@@ -271,10 +281,12 @@ class Player extends Fighter {
     else if (this.state === 'atk') this.updAtk(dt);
     else if (this.state === 'skill') this.updSkill(dt);
     else if (this.state === 'ult') this.updUlt(dt);
-    this.noGrav = this.state === 'dash' || this.state === 'ult' || (this.state === 'skill' && this.sk.noGrav);
+    this.noGrav = this.state === 'dash' || this.state === 'ult' || (this.state === 'skill' && this.sk.noGrav) || (this.state === 'atk' && this.atk.d.air === 'fly' && this.st < 0.26);
     const fallV = this.vy;
     this.physics(dt);
-    if (this.ground) { this.jumps = 0; this.airDash = true; this.airFlipUsed = false; if (!wasGround) this.land(fallV); }
+    this.stompCd = (this.stompCd || 0) - dt;
+    if (!this.ground) this.headStomp();
+    if (this.ground) { this.jumps = 0; this.airDash = true; this.airFlipUsed = false; this.doubleUsed = false; if (!wasGround) this.land(fallV); }
     const fastBlend = this.state === 'atk' || this.state === 'skill' || this.state === 'dash';
     this.animate(dt, this.target(dt), fastBlend ? 34 : 17);
     this.ghostT -= dt;
@@ -286,7 +298,7 @@ class Player extends Fighter {
     }
     this.computeJ();
     for (const q of this.limbTrail) q.age += dt;
-    if (this.state === 'atk') { const d = this.atk.d; if (this.st >= d.a - 0.03 && this.st <= d.b + 0.07) this.pushTrail(d.limb, d.gold); }
+    if (this.state === 'atk') { const d = this.atk.d; if (this.st >= d.a - 0.03 && this.st <= d.b + 0.07) this.pushTrail(d.twin && this.st >= d.twin ? 'f2' : d.limb, d.gold); }
     else if (this.state === 'skill' && this.sk.name === 's3') this.pushTrail('f1', true);
     while (this.limbTrail.length && this.limbTrail[this.limbTrail.length - 1].age > 0.13) this.limbTrail.pop();
     this.scarf.update(this.J.sa.x, this.J.sa.y, dt);
@@ -318,13 +330,19 @@ class Player extends Fighter {
   }
   updDash(dt) {
     this.vy = 0;
+    if (take('attack')) return this.startAtk(0, FLYK);
     if (Math.random() < 0.7) spawn({ x: this.x - this.face * 10, y: this.y - rand(10, 80), vx: -this.face * rand(100, 300), vy: rand(-20, 20), life: 0.3, size: rand(2, 4), col: C.jade });
     if (this.st > 0.19) { this.setState('idle'); this.vx = this.face * 390; }
   }
-  startAtk(i) {
-    let d;
-    if (!this.ground && !(i > 0 && this.route === 'kick')) d = this.airFlipUsed ? AIRKICK : AIRFLIP;
-    else if (i === 0) {
+  startAtk(i, forced) {
+    let d = forced;
+    if (d) { /* a move chosen by the caller */ }
+    else if (!this.ground && !(i > 0 && this.route === 'kick')) {
+      // in the air: down = stomp, still rising = scissor kick, otherwise somersault kick and then the dive kick
+      if (game.state === 'play' && keys.down) d = STOMP;
+      else if (this.vy < -150 && !this.doubleUsed) d = SONGPHI;
+      else d = this.airFlipUsed ? AIRKICK : AIRFLIP;
+    } else if (i === 0) {
       // the stick picks the chain: down = sweep, a direction = kicks (a sprint opens with a flying knee), none = fists
       const dir = this.dirKey();
       this.route = game.state === 'play' && keys.down ? 'low' : dir ? 'kick' : 'fist';
@@ -334,17 +352,24 @@ class Player extends Fighter {
     if (d.flip) { this.flip = d.flip; this.flipT = 0; this.flipDur = d.dur * 0.92; }
     if (d.air === 'dive') { this.vx = this.face * 600; this.vy = 620; }
     else if (d.air === 'flip') { this.airFlipUsed = true; this.vy = Math.min(this.vy, -260); this.vx = this.face * 260; }
+    else if (d.air === 'stomp') { this.vx = 0; this.vy = 1400; }
+    else if (d.air === 'double') { this.doubleUsed = true; this.vy = Math.min(this.vy, -240); this.vx = this.face * 300; }
+    else if (d.air === 'fly') { this.vx = this.face * 1100; this.vy = -240; this.ground = false; }
     else { this.vx = this.face * d.lunge; if (d.hop) { this.vy = d.hop; this.ground = false; } }
     addGhost(this.computeJ(), d.gold ? C.gold : C.white, this.s);
     sfx('swing');
   }
   pushTrail(limb, gold) {
-    const J = this.J, b = J[{ h1: 'e1', h2: 'e2', f1: 'k1', k1: 'hip' }[limb]], t = J[limb];
+    const J = this.J, b = J[{ h1: 'e1', h2: 'e2', f1: 'k1', f2: 'k2', k1: 'hip' }[limb]], t = J[limb];
     this.limbTrail.unshift({ bx: b.x, by: b.y, tx: t.x + (t.x - b.x) * 0.35, ty: t.y + (t.y - b.y) * 0.35, age: 0, gold });
   }
   updAtk(dt) {
     const A = this.atk, d = A.d, t = this.st;
     if (!d.air) this.vx = approach(this.vx, 0, 1600 * dt);
+    if (d.air === 'fly') { if (t < 0.26) this.vy = -240 * (1 - t / 0.26); else this.vx = approach(this.vx, this.face * 260, 3000 * dt); }
+    if (d.air === 'stomp') { this.vy = 1400; this.vx = 0; }
+    if (d.air === 'double') this.vy = Math.min(this.vy, 60); // hangs in the air while the legs scissor
+    if (d.twin && t >= d.twin && !A.second) { A.second = true; A.hits = new Set(); sfx('swing'); addGhost(this.J, C.gold, this.s); }
     if (buf.attack > 0 && t > d.a) { buf.attack = 0; this.queued = true; }
     if (d.spin) this.face = t < (d.spinEnd ?? d.a) ? (Math.floor(t / 0.06) % 2 ? A.f0 : -A.f0) : A.f0; // whip round before the blow
     if (!A.acted && t >= d.a) {
@@ -359,10 +384,11 @@ class Player extends Fighter {
       if (take('dash') && this.dashCd <= 0 && (this.ground || this.airDash)) return this.startDash(dir);
       for (const n of SKILL_KEYS) if (take(n)) return this.cast(n);
       if (take('ult')) return this.startUlt();
-      if (this.queued && (d.air ? d.air === 'flip' : A.i < ROUTES[this.route].length - 1)) return this.startAtk(A.i + 1);
+      if (this.queued && (d.air ? d.air === 'flip' || d.air === 'double' : A.i < ROUTES[this.route].length - 1)) return this.startAtk(A.i + 1);
     }
     if (t >= d.dur) {
       if (!d.air) { this.comboT = 0.32; this.comboNext = (A.i + 1) % ROUTES[this.route].length; } // a late press still continues the chain
+      if (d.santo && !this.ground) { this.flip = d.santo; this.flipT = 0; this.flipDur = 0.45; }
       this.setState('idle');
     }
   }
@@ -377,7 +403,38 @@ class Player extends Fighter {
       hit(e, d.dmg, dir * d.kb[0], d.kb[1], d.stun, { big: d.big });
       if (d.hitPalm) spawn({ x: e.x, y: e.y - 55 * e.s, vx: this.face * 200, kind: 'palm', size: 30, life: 0.3, drag: 3 });
       if (d.air === 'dive') { this.vy = -560; this.vx = -this.face * 80; this.jumps = Math.min(this.jumps, 2); this.airFlipUsed = false; this.setState('idle'); return; }
+      if (d.air === 'stomp') return this.springOff(-800, 'Đạp!');
       if (d.air === 'flip') this.vy = Math.min(this.vy, -300);
+    }
+  }
+  // bounce off a foe into a front somersault, with the air jumps and air kicks restored
+  springOff(vy, label) {
+    this.vy = vy; this.vx = this.face * 80; this.setState('idle'); this.atk = null;
+    this.flip = 1; this.flipT = 0; this.flipDur = 0.42; this.jumps = 1; this.airFlipUsed = false; this.doubleUsed = false; this.stompCd = 0.25;
+    ring(this.x, this.y, 4, 48, 0.3, C.jade, 4, { flat: 0.35 }); burst(this.x, this.y, 9, C.jade, 220);
+    popText(this.x, this.y - 30, label, '#9fe8cf', 15); sfx('jump');
+  }
+  // 踏雪無痕: falling onto a foe's head is enough to spring off it
+  headStomp() {
+    const air = this.state === 'atk' && this.atk.d.air && this.atk.d.air !== 'stomp';
+    if (this.ground || this.vy < 120 || this.stompCd > 0 || !(this.state === 'idle' || air)) return;
+    for (const e of game.enemies) {
+      if (e.dead || Math.abs(e.x - this.x) > 24 * e.s) continue;
+      const head = e.y - 92 * e.s;
+      if (this.y < head - 6 || this.y > head + 26) continue;
+      this.y = head; hit(e, 6, this.face * 60, 160, 0.45, { chi: 2 });
+      return this.springOff(-760, 'Đạp Tuyết');
+    }
+  }
+  // the stomp meeting the ground: cracked stone and a ring of force
+  stompImpact() {
+    const x = this.x, y = this.y, A = this.atk;
+    ring(x, y, 10, 150, 0.45, C.gold, 9, { flat: 0.25 }); dust(x, y, 14);
+    for (let i = 0; i < 10; i++) spawn({ x: x + rand(-16, 16), y: y - 2, vx: rand(-260, 260), vy: rand(-600, -240), life: rand(0.5, 0.8), size: rand(2.5, 5), col: [120, 96, 74], kind: 'rock', grav: 2000, drag: 0.3, rot: rand(0, 6), vr: rand(-10, 10) });
+    shake(9); sfx('heavy'); FX.zoom = Math.max(FX.zoom, 0.04);
+    for (const e of game.enemies) {
+      if (e.dead || A.hits.has(e) || Math.abs(e.x - x) > 105 || Math.abs(e.y - y) > 60) continue;
+      A.hits.add(e); hit(e, 10, (Math.sign(e.x - x) || this.face) * 260, -400, 0.6, { big: true });
     }
   }
   cast(name) {
@@ -537,6 +594,7 @@ class Player extends Fighter {
   land(v = 0) {
     this.flip = 0; this.pose.rot = 0;
     if (this.state === 'skill' && this.sk.name === 's2' && this.sk.ph === 'c') return this.slamImpact();
+    if (this.state === 'atk' && this.atk.d.air === 'stomp') this.stompImpact();
     if (this.state === 'atk' && this.atk.d.air) this.setState('idle');
     if (this.state === 'atk' && this.atk.d.act === 'axe' && this.atk.acted && !this.atk.slammed) axeImpact(this);
     if (v > 450) this.landT = Math.min(0.16, v / 6500); // knees absorb the landing
@@ -589,7 +647,7 @@ class Player extends Fighter {
     sfx('boom'); sfx('roar'); sfx('gong');
     for (const e of game.enemies) {
       if (e.dead || Math.abs(e.x - (view.camX + view.w / 2)) > view.w * 0.65) continue;
-      hit(e, 60, (Math.sign(e.x - this.x) || this.face) * 900, -900, 1, { big: true, dragon: true, chi: 0 });
+      hit(e, 60, (Math.sign(e.x - this.x) || this.face) * 900, -900, 1, { big: true, dragon: true, chi: 0, pierce: true });
     }
   }
   skPose() {
@@ -605,7 +663,7 @@ class Player extends Fighter {
     if (s === 'dead') return POSES.down;
     if (s === 'hurt') return POSES.hurt;
     if (s === 'dash') return POSES.dash;
-    if (s === 'atk') { const d = this.atk.d; return POSES[this.st < d.a ? d.w : d.p]; }
+    if (s === 'atk') { const d = this.atk.d; if (d.twin && this.st >= d.twin) return POSES.kick2; return POSES[this.st < d.a ? d.w : d.p]; }
     if (s === 'skill') return this.skPose();
     if (s === 'ult') return this.st < 0.8 ? POSES.raise : (this.palmAlt ? POSES.palm2 : POSES.palm);
     if (!this.ground) return this.flip ? POSES.tuck : this.gliding ? POSES.glide : mixPose(POSES.jump, POSES.fall, clamp((this.vy + 250) / 500, 0, 1));

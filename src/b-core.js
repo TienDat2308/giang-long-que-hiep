@@ -17,18 +17,16 @@ const WORLD_W = 2600, GROUND = 470;
 const view = { w: 960, h: 540, scale: 1, dpr: 1, camX: 0, camY: 0, shake: 0, look: 0 };
 function resize() {
   view.dpr = Math.min(2, window.devicePixelRatio || 1);
-  const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight;
+  // a hidden page can report zero size; fall back so the scale (and with it the camera) never becomes 0 or NaN
+  const w = cv.clientWidth || innerWidth || 960, h = cv.clientHeight || innerHeight || 540;
   cv.width = Math.round(w * view.dpr); cv.height = Math.round(h * view.dpr);
-  view.scale = Math.min(h / 540, w / 760);
+  view.scale = Math.max(0.05, Math.min(h / 540, w / 760));
   view.w = w / view.scale; view.h = h / view.scale;
 }
 addEventListener('resize', resize); resize();
 
-// floating rooftops (one-way platforms)
-const PLATFORMS = [
-  { x: 360, y: 340, w: 240 }, { x: 790, y: 232, w: 200 }, { x: 1160, y: 335, w: 280 },
-  { x: 1220, y: 150, w: 160 }, { x: 1610, y: 232, w: 200 }, { x: 2000, y: 340, w: 240 },
-];
+// one-way platforms of the current map (set by setMap in b-maps.js)
+let PLATFORMS = [];
 const C = {
   gold: [242, 181, 68], jade: [98, 214, 180], blood: [226, 72, 63], paper: [239, 230, 210],
   white: [255, 246, 222], ember: [255, 128, 64], mist: [150, 140, 170], moon: [244, 231, 197], plum: [243, 166, 184],
@@ -57,7 +55,7 @@ addEventListener('keydown', e => {
   if (!ov.hidden && e.target.closest && e.target.closest('#overlay button') && !e.target.classList.contains('cta') && (e.code === 'Enter' || e.code === 'Space')) return; // let a focused menu button activate itself
   if (!ov.hidden && (e.code === 'Enter' || e.code === 'Space')) {
     e.preventDefault();
-    const b = ov.querySelector('[data-screen]:not([hidden]) .cta'); if (b) b.click();
+    const b = ov.querySelector('[data-screen]:not([hidden]) .cta:not([hidden])'); if (b) b.click();
     return;
   }
   const a = KEYMAP[e.code]; if (!a) return;
@@ -198,7 +196,7 @@ function updateFX(dt) {
     p.vx *= d; p.vy = p.vy * d + p.grav * dt;
     p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
     if (p.grav > 0 && p.y > GROUND) { p.y = GROUND; p.vy *= -0.3; p.vx *= 0.6; }
-    if (p.kind === 'petal') { p.vx += Math.sin(T * 1.3 + p.rot) * 6 * dt; if (p.y > GROUND) p.t = p.life; }
+    if (p.kind === 'petal' || p.kind === 'snow') { p.vx += Math.sin(T * 1.3 + p.rot) * 6 * dt; if (p.y > GROUND) p.t = p.life; }
   }
   FX.parts = FX.parts.filter(p => p.t < p.life);
   if (FX.parts.length > 1500) FX.parts.splice(0, FX.parts.length - 1500);
@@ -218,8 +216,9 @@ function drawSoftFX() {
       ctx.globalAlpha = Math.min(1, k * 3); ctx.fillStyle = rgba(p.col, 1);
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.75); ctx.restore();
     }
+    else if (p.kind === 'snow') { ctx.globalAlpha = Math.min(1, k * 4) * 0.85; ctx.fillStyle = rgba(p.col, 1); ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, TAU); ctx.fill(); }
     else if (p.kind === 'petal') {
-      ctx.globalAlpha = Math.min(1, k * 4) * 0.8; ctx.fillStyle = rgba(C.plum, 1);
+      ctx.globalAlpha = Math.min(1, k * 4) * 0.8; ctx.fillStyle = rgba(p.col, 1);
       ctx.beginPath(); ctx.ellipse(p.x, p.y, p.size, p.size * 0.45 * Math.abs(Math.cos(p.rot)) + 0.6, p.rot, 0, TAU); ctx.fill();
     }
   }
@@ -287,91 +286,3 @@ function drawTexts() {
   ctx.restore();
 }
 
-// ---------- scenery ----------
-const STARS = Array.from({ length: 130 }, () => ({ x: Math.random(), y: Math.random(), r: rand(0.5, 1.6), p: rand(0, TAU) }));
-const LAYERS = [
-  { p: 0.08, seed: 1.3, amp: 120, lift: 175, col: '#2a2043', mist: 'rgba(120,96,150,0.20)' },
-  { p: 0.2, seed: 4.2, amp: 95, lift: 105, col: '#1d1630', mist: 'rgba(90,70,120,0.18)', pagodas: [520, 1650] },
-  { p: 0.42, seed: 7.9, amp: 70, lift: 45, col: '#130f20', mist: 'rgba(60,46,86,0.22)', pagodas: [980, 2300] },
-];
-function ridge(x, seed, amp) {
-  return (Math.sin(x * 0.0023 + seed) * 0.45 + Math.sin(x * 0.0061 + seed * 2.3) * 0.3 +
-    Math.sin(x * 0.017 + seed * 4.1) * 0.12 + Math.abs(Math.sin(x * 0.0011 + seed * 0.7)) * 0.9) * amp;
-}
-function drawPagoda(x, y, col) {
-  ctx.fillStyle = col;
-  for (let i = 0; i < 4; i++) {
-    const bw = 16 - i * 3, rw = bw + 7, yy = y - i * 15;
-    ctx.fillRect(x - bw / 2, yy - 11, bw, 12);
-    ctx.beginPath(); ctx.moveTo(x - rw - 5, yy - 15); ctx.quadraticCurveTo(x - rw * 0.3, yy - 12, x, yy - 19);
-    ctx.quadraticCurveTo(x + rw * 0.3, yy - 12, x + rw + 5, yy - 15); ctx.lineTo(x + rw, yy - 10); ctx.lineTo(x - rw, yy - 10); ctx.closePath(); ctx.fill();
-  }
-  ctx.fillRect(x - 1, y - 76, 2, 16);
-  ctx.fillStyle = 'rgba(255,170,90,0.55)'; ctx.fillRect(x - 2.5, y - 8, 5, 5); ctx.fillRect(x - 2, y - 23, 4, 4);
-}
-function drawBackground() {
-  const s = view.dpr * view.scale; ctx.setTransform(s, 0, 0, s, 0, 0);
-  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-  const W = view.w, gy = GROUND - view.camY;
-  const sky = ctx.createLinearGradient(0, gy - 600, 0, gy);
-  sky.addColorStop(0, '#07060d'); sky.addColorStop(0.55, '#171229'); sky.addColorStop(0.86, '#2e1d3c'); sky.addColorStop(1, '#46283f');
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, view.h);
-  ctx.fillStyle = '#efe6d2';
-  for (const st of STARS) { ctx.globalAlpha = 0.3 + 0.3 * Math.sin(T * 1.4 + st.p); ctx.fillRect(st.x * W, st.y * (gy - 140), st.r, st.r); }
-  const mx = W * 0.74 - view.camX * 0.02, my = gy - 335;
-  ctx.globalCompositeOperation = 'lighter';
-  glow(mx, my, 230, [90, 70, 120], 0.55, false); glow(mx, my, 100, C.moon, 0.3, false);
-  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  ctx.fillStyle = '#f4e7c5'; ctx.beginPath(); ctx.arc(mx, my, 54, 0, TAU); ctx.fill();
-  ctx.fillStyle = 'rgba(190,168,140,0.28)';
-  for (const [cx, cy, r] of [[-16, -10, 11], [14, 8, 8], [6, -22, 5], [-8, 18, 6]]) { ctx.beginPath(); ctx.arc(mx + cx, my + cy, r, 0, TAU); ctx.fill(); }
-  for (const L of LAYERS) {
-    const off = view.camX * L.p, base = gy - L.lift;
-    ctx.fillStyle = L.col; ctx.beginPath(); ctx.moveTo(0, gy + 2);
-    for (let x = 0; x <= W + 12; x += 12) ctx.lineTo(x, base - ridge(x + off, L.seed, L.amp));
-    ctx.lineTo(W + 12, gy + 2); ctx.closePath(); ctx.fill();
-    if (L.pagodas) for (const lx of L.pagodas) { const x = lx - off; if (x > -60 && x < W + 60) drawPagoda(x, base - ridge(lx, L.seed, L.amp) + 4, L.col); }
-    const m = ctx.createLinearGradient(0, base - 50, 0, gy); m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(1, L.mist);
-    ctx.fillStyle = m; ctx.fillRect(0, base - 50, W, gy - base + 52);
-  }
-}
-function lanternPos(p) {
-  const sw = Math.sin(T * 1.6 + p.x) * 0.14;
-  return { x: p.x + p.w / 2 + Math.sin(sw) * 24, y: p.y + 14 + Math.cos(sw) * 24 };
-}
-function drawGround(between) {
-  const x0 = view.camX - 60, w = view.w + 120;
-  const g = ctx.createLinearGradient(0, GROUND, 0, GROUND + 220);
-  g.addColorStop(0, '#221b30'); g.addColorStop(1, '#07060b');
-  ctx.fillStyle = g; ctx.fillRect(x0, GROUND, w, view.h + 500);
-  if (between) between();
-  ctx.strokeStyle = 'rgba(239,230,210,0.05)'; ctx.lineWidth = 1; ctx.beginPath();
-  const mid = view.camX + view.w / 2;
-  for (let x = Math.floor(x0 / 90) * 90; x < x0 + w; x += 90) { ctx.moveTo(x, GROUND + 2); ctx.lineTo(x + (x - mid) * 0.35, GROUND + 90); }
-  for (const yy of [16, 40, 76]) { ctx.moveTo(x0, GROUND + yy); ctx.lineTo(x0 + w, GROUND + yy); }
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(242,181,68,0.3)'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(x0, GROUND); ctx.lineTo(x0 + w, GROUND); ctx.stroke();
-}
-function drawPlatforms() {
-  for (const p of PLATFORMS) {
-    if (p.x + p.w < view.camX - 60 || p.x > view.camX + view.w + 60) continue;
-    const lx = p.x + p.w / 2, { x: bx, y: by } = lanternPos(p);
-    ctx.strokeStyle = 'rgba(239,230,210,0.3)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(lx, p.y + 12); ctx.lineTo(bx, by - 10); ctx.stroke();
-    ctx.globalCompositeOperation = 'lighter'; glow(bx, by, 48, C.ember, 0.5, false);
-    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    ctx.fillStyle = '#d4442c'; ctx.beginPath(); ctx.ellipse(bx, by, 8, 10, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#f2b544'; ctx.fillRect(bx - 5, by - 11, 10, 2.5); ctx.fillRect(bx - 5, by + 8.5, 10, 2.5);
-    ctx.fillStyle = '#1c1527'; ctx.beginPath();
-    ctx.moveTo(p.x - 24, p.y - 9); ctx.quadraticCurveTo(p.x - 10, p.y, p.x + 4, p.y);
-    ctx.lineTo(p.x + p.w - 4, p.y); ctx.quadraticCurveTo(p.x + p.w + 10, p.y, p.x + p.w + 24, p.y - 9);
-    ctx.lineTo(p.x + p.w + 6, p.y + 13); ctx.lineTo(p.x - 6, p.y + 13); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(239,230,210,0.07)'; ctx.beginPath();
-    for (let x = p.x + 8; x < p.x + p.w - 4; x += 13) { ctx.moveTo(x, p.y + 2); ctx.lineTo(x, p.y + 12); }
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(242,181,68,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath();
-    ctx.moveTo(p.x - 24, p.y - 9); ctx.quadraticCurveTo(p.x - 10, p.y, p.x + 4, p.y); ctx.lineTo(p.x + p.w - 4, p.y);
-    ctx.quadraticCurveTo(p.x + p.w + 10, p.y, p.x + p.w + 24, p.y - 9); ctx.stroke();
-  }
-}

@@ -7,3 +7,4 @@ ios/
 *.ipa
 .DS_Store
 *.log
+.claude/
